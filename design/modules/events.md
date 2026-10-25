@@ -6,7 +6,7 @@ The public face of the site: what's on, and the details of each event.
 - Lists **published** events whose start is today or later, soonest first.
 - **Each event shows:** title, day and date (*Sat, Nov 8*), start time (and end time, if set), location, and **Full** when it has reached capacity.
 - Each title links to `/events/{id}`.
-- When there are no upcoming events: *No events are planned right now. Check back soon, or [get in touch](/contact).*
+- When there are no upcoming events: *No events are planned right now. Check back soon.*
 
 ## `/events/{id}`: one event
 - **Shows:** title, date and times, location, and the description. The description is plain text, with line breaks kept and links made clickable.

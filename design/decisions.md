@@ -23,7 +23,7 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Why: the club needs a head count and a way to reach people about a change, nothing more. Data that isn't kept can't leak.
 
 ## D-005 — Contact messages are emailed, not stored
-- Date: 2026-10-25 · Status: Accepted
+- Date: 2026-10-25 · Status: Superseded by D-022
 - Decision: The contact form sends its message to the organizers' email address and keeps no copy.
 - Why: the organizers already read and answer email. A stored inbox would be a second place to check and a second copy of personal data.
 
@@ -33,12 +33,12 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Why: everyone who comes to an event is local. Converting time zones would only add room for mistakes.
 
 ## D-007 — Organizers sign in with an emailed one-time link
-- Date: 2026-10-25 · Status: Accepted
-- Decision: No passwords. An organizer asks for a link, and the link is valid for 15 minutes and works once. Opening it shows a **Sign in** button; pressing the button uses up the link. See [modules/signin.md](modules/signin.md).
+- Date: 2026-10-25 · Status: Superseded by D-023
+- Decision: No passwords. An organizer asks for a link, and the link is valid for 15 minutes and works once. Opening it shows a **Sign in** button; pressing the button uses up the link. Was in modules/signin.md.
 - Why: there are no passwords to store, leak or reset. The button stops email link scanners from using up the link.
 
 ## D-008 — The first organizer comes from configuration
-- Date: 2026-10-25 · Status: Accepted
+- Date: 2026-10-25 · Status: Superseded by D-023
 - Decision: The first organizer's email address is a deploy setting, and that organizer is added on first start. After that, organizers add and remove each other on `/admin/organizers`.
 - Why: a fresh site needs someone who can sign in, without any manual database work (D-014).
 
@@ -58,7 +58,7 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Why: this stops most form spam with no third-party service and no hurdle for real visitors.
 
 ## D-012 — Email goes through a configurable mail relay
-- Date: 2026-10-25 · Status: Accepted
+- Date: 2026-10-25 · Status: Superseded by D-022
 - Decision: Sign-in links, sign-up confirmations and contact messages are sent through an SMTP relay. Its host, port, user and password are deploy secrets, and the sender address is a setting.
 - Why: every host can reach a mail relay. Keeping mail separate from hosting lets either one change without the other.
 
@@ -106,3 +106,13 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Date: 2026-10-25 · Status: Accepted
 - Decision: `GET /health` reports whether the site can reach its storage, and which release is running. The deploy's smoke test requires 200 and the new release ID.
 - Why: a deploy isn't done until the new release is answering and can reach its data.
+
+## D-022 — The site sends no email
+- Date: 2026-10-25 · Status: Accepted (supersedes D-005 and D-012)
+- Decision: There's no contact form, no sign-up confirmation email and no mail relay. A sign-up is confirmed on the page. People who need to cancel tell an organizer, who removes the sign-up.
+- Why: this is a demo of moving a site between platforms. Mail setup adds secrets and one-time steps that are the same on every platform, so it adds nothing to the demo.
+
+## D-023 — Organizers share one password
+- Date: 2026-10-25 · Status: Accepted (supersedes D-007 and D-008)
+- Decision: The organizers' area is protected by one password, set as a deploy secret. There are no organizer accounts and no Organizers page. A wrong password is answered slowly. Changing the password ends every session. See [modules/signin.md](modules/signin.md).
+- Why: emailed links need email (D-022). Separate accounts would add password storage and management to a demo that doesn't need them. The activity log records what changed and when, but not who.

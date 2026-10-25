@@ -6,13 +6,12 @@ A small community club runs a handful of events a month: a park clean-up, a potl
 ## The site
 A small public website for the club, of the kind found on thousands of shared hosts:
 - **Upcoming events:** what's on, when and where.
-- **Sign up:** a short form on each event, with a confirmation email.
-- **Contact:** a form that emails the organizers.
+- **Sign up:** a short form on each event, confirmed on the page.
 - **Organizers' area:** sign in, add and edit events, and see who has signed up.
 
 ## Users
 - **Visitors:** anyone. They don't have accounts.
-- **Organizers:** a few club volunteers who manage events. All organizers have the same permissions.
+- **Organizers:** a few club volunteers who manage events. They share one password (D-023).
 
 ## Goals
 - **Simple to use:** on a phone first, but it also works well on a laptop.
@@ -26,6 +25,7 @@ A small public website for the club, of the kind found on thousands of shared ho
 ## Non-goals
 - Payments or tickets.
 - Visitor accounts, profiles or passwords.
-- A waiting list, or visitors cancelling their own sign-up (they use the contact form instead).
-- A mailing list or newsletter.
+- Separate accounts for each organizer.
+- A waiting list, or visitors cancelling their own sign-up (they tell an organizer instead).
+- Sending email of any kind: confirmations, reminders, a contact form or a newsletter (D-022).
 - More than one language.

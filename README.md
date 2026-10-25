@@ -27,8 +27,9 @@ When the platform underneath becomes a liability, you don't patch and hope. You 
 A small community-organization website, the kind found on thousands of shared hosts:
 - a public events listing;
 - a sign-up form for an event;
-- a contact form that sends email;
-- an admin login to manage events and see sign-ups.
+- a password-protected organizers' area to manage events and see sign-ups.
+
+It deliberately sends no email, which keeps the demo free of mail setup.
 
 ## Two branches
 

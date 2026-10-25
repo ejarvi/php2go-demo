@@ -18,7 +18,7 @@ Revert the commit and push. There's no separate rollback button.
 
 ## Secrets and settings (D-015)
 - **Never in the repository.** Secrets are GitHub secrets, scoped to the deploy environment, or the platform's own secret store.
-- **The list:** mail relay credentials, the secret used for hashing codes, the first organizer's email, the organizers' contact address, the club's name and time zone, and whatever the platform needs to accept a deploy.
+- **The list:** the organizers' password, the secret used for hashing session codes, the club's name and time zone, and whatever the platform needs to accept a deploy.
 - **Deploy credentials (D-015):** short-lived credentials are preferred to stored keys. Where a stored key can't be avoided, it can do nothing but deploy this one site.
 
 ## One-time setup (D-014)
