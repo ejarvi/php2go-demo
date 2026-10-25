@@ -16,3 +16,5 @@ This folder is the long-lived part of the project. The code in each branch is ge
 | [00-vision.md](00-vision.md) | The problem, who uses the site, goals and non-goals |
 | [decisions.md](decisions.md) | The decision log |
 | [data.md](data.md) | What is stored, in general terms, and how long it's kept |
+| [pages.md](pages.md) | Every page and form, and who can reach it |
+| [modules/](modules/) | One spec per feature: [events](modules/events.md), [signups](modules/signups.md), [contact](modules/contact.md), [signin](modules/signin.md), [admin](modules/admin.md), [site](modules/site.md) |
