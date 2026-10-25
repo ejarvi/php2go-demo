@@ -61,3 +61,48 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Date: 2026-10-25 · Status: Accepted
 - Decision: Sign-in links, sign-up confirmations and contact messages are sent through an SMTP relay. Its host, port, user and password are deploy secrets, and the sender address is a setting.
 - Why: every host can reach a mail relay. Keeping mail separate from hosting lets either one change without the other.
+
+## D-013 — The repository is the single source of truth, and deploys are automatic
+- Date: 2026-10-25 · Status: Accepted
+- Decision: The live site is always built from `main`. Every push to `main` deploys through GitHub Actions, one deploy at a time. See [delivery.md](delivery.md).
+- Why: what's in the repository is what's running. There's nothing to remember to copy.
+
+## D-014 — No manual server work after one-time setup
+- Date: 2026-10-25 · Status: Accepted
+- Decision: Hand-done steps are allowed only for one-time setup, and they're written down as a checklist in the implementation's `platform/` folder.
+- Why: anything changed by hand is invisible to the next person, and it gets lost when the site moves.
+
+## D-015 — No secrets in the repository; deploy credentials as narrow as possible
+- Date: 2026-10-25 · Status: Accepted
+- Decision: Secrets live in GitHub secrets or the platform's secret store. Deploys use short-lived credentials where the platform allows them. A stored deploy key, when unavoidable, can deploy this site and nothing else.
+- Why: the repository is meant to be public. A leaked deploy credential should be useless, or at least contained.
+
+## D-016 — Release IDs, and rolling back by reverting
+- Date: 2026-10-25 · Status: Accepted
+- Decision: Each deploy gets a release ID `r<N>+<short commit>`. It's shown in the footer and in `/health`, and the commit is tagged with it. To roll back, revert the commit.
+- Why: anyone looking at a page can tell exactly which commit is running.
+
+## D-017 — Pipeline order: test, gate, deploy, smoke test, tag
+- Date: 2026-10-25 · Status: Accepted
+- Decision: A failure at any step stops the rest, and the live site stays on its last good release.
+- Why: the same order works on any platform, so the pipeline can stay the same when the site moves.
+
+## D-018 — Accessible and responsive, checked on every deploy
+- Date: 2026-10-25 · Status: Accepted
+- Decision: The site meets WCAG 2.2 AA and works at phone, laptop and wide-screen sizes. Automated accessibility and layout checks in three browser engines must pass before any deploy.
+- Why: checks that run on every deploy catch what a reviewer would miss on the fifth change.
+
+## D-019 — Strict headers, and CSRF protection on every form
+- Date: 2026-10-25 · Status: Accepted
+- Decision: Every page sends the headers in [modules/site.md](modules/site.md): a strict Content Security Policy, `Referrer-Policy: same-origin`, and so on. Every POST checks a CSRF token and the `Origin` header.
+- Why: these block whole classes of attack for free. The referrer policy is `same-origin`, not `no-referrer`, because with `no-referrer` some browsers send `Origin: null` and the origin check would refuse every legitimate form.
+
+## D-020 — The lowest cost the hosting allows
+- Date: 2026-10-25 · Status: Accepted
+- Decision: Anything that costs money while the site sits idle needs its own decision. Where hosting is described as code, a test in the pipeline fails the deploy if a resource that costs money while idle appears without one.
+- Why: a small club site gets little traffic. It should cost little or nothing, and a test catches an expensive mistake before the bill does.
+
+## D-021 — A health check the smoke test can trust
+- Date: 2026-10-25 · Status: Accepted
+- Decision: `GET /health` reports whether the site can reach its storage, and which release is running. The deploy's smoke test requires 200 and the new release ID.
+- Why: a deploy isn't done until the new release is answering and can reach its data.

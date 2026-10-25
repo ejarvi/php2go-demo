@@ -20,11 +20,11 @@ What every page shares: layout, errors, headers, the health check and the releas
 
 ## Forms
 - **Every POST carries a CSRF token** and is also checked against the `Origin` header.
-- A missing or wrong token gets 403 and a page that offers to go back and try again.
+- A missing or wrong token gets 403 and a page that offers to return to the form and try again.
 
 ## Errors
 - **Unknown paths:** a 404 page in the site's layout.
-- **Unexpected errors:** a 500 page saying *Something went wrong. Please try again.* The details go to the application log, never to the page (and never personal data, see [data.md](../data.md)).
+- **Unexpected errors:** a 500 page saying *Something went wrong. Please try again.* The details are written to the application log, never to the page (and never personal data, see [data.md](../data.md)).
 
 ## Acceptance tests
 1. `GET /health` returns 200 with `status` `ok` and the current release ID.

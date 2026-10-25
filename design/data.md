@@ -23,4 +23,4 @@ What the site keeps, for how long, and who can see it. This says nothing about h
 - **Times:** every date and time is in the club's time zone, a single setting. Pages never show a time zone choice (D-006).
 - **Deletion:** removing an event also removes its sign-ups.
 - **Export:** organizers can download the sign-ups for one event as a CSV file, for printing a check-in list.
-- **Nothing personal in logs:** names, email addresses and message text never go into application logs or activity entries.
+- **Nothing personal in logs:** names, email addresses and message text never appear in application logs or activity entries.
