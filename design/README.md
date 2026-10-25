@@ -15,3 +15,4 @@ This folder is the long-lived part of the project. The code in each branch is ge
 |------|---------------|
 | [00-vision.md](00-vision.md) | The problem, who uses the site, goals and non-goals |
 | [decisions.md](decisions.md) | The decision log |
+| [data.md](data.md) | What is stored, in general terms, and how long it's kept |

@@ -16,11 +16,11 @@ A small public website for the club, of the kind found on thousands of shared ho
 
 ## Goals
 - **Simple to use:** on a phone first, but it also works well on a laptop.
-- **Accessible:** meets WCAG 2.2 AA (D-013).
-- **Keeps little personal data, briefly:** only what an event needs, deleted after it's over (D-011).
-- **The repository is the single source of truth:** every change goes through it and is deployed automatically (D-004).
-- **No manual server work after one-time setup** (D-005).
-- **Cheap to run:** the lowest cost the hosting allows (D-015).
+- **Accessible:** meets WCAG 2.2 AA (D-018).
+- **Keeps little personal data, briefly:** only what an event needs, deleted after it's over (D-004).
+- **The repository is the single source of truth:** every change goes through it and is deployed automatically (D-013).
+- **No manual server work after one-time setup** (D-014).
+- **Cheap to run:** the lowest cost the hosting allows (D-020).
 - **Can move to a new platform:** the design outlives any one implementation (D-002, D-003).
 
 ## Non-goals
