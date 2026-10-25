@@ -116,3 +116,8 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Date: 2026-10-25 · Status: Accepted (supersedes D-007 and D-008)
 - Decision: The organizers' area is protected by one password, set as a deploy secret. There are no organizer accounts and no Organizers page. A wrong password is answered slowly. Changing the password ends every session. See [modules/signin.md](modules/signin.md).
 - Why: emailed links need email (D-022). Separate accounts would add password storage and management to a demo that doesn't need them. The activity log records what changed and when, but not who.
+
+## D-024 — Where the site runs is configured in GitHub, never committed
+- Date: 2026-10-25 · Status: Accepted
+- Decision: No host names, server paths, site addresses, account numbers or regions appear anywhere in the repository. Each branch's deploy job reads them from its GitHub environment: variables for settings, secrets for secrets. It fails with a clear message if one is missing. Docs and checklists name the variables but use placeholders for their values. See [delivery.md](delivery.md).
+- Why: the repository is public, and the author's own hosting is not part of the demo. It also means anyone can deploy their own copy by filling in their own environment, with no code changes.

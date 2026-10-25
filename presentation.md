@@ -63,8 +63,6 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 
 **6. Keep the pipeline and change everything under it.** Moving from SSH to cloud deploys didn't mean leaving GitHub Actions. The gates carried over: tests, accessibility checks with Playwright + axe, deploy, smoke test, release tag.
 
-**One honest note on cost:** I'm keeping my shared hosting plan, but only for other things on it; the app itself could be spun off entirely. Email still goes through that plan's SMTP relay for convenience, which has nothing to do with PHP or Go, and Amazon SES is the likely next step.
-
 **Bugs no spec predicted, which carry over to other projects:**
 - `Referrer-Policy: no-referrer` makes browsers send `Origin: null`, so the CSRF check refused every sign-in.
 - Warm Lambdas keep secrets they read at cold start.
