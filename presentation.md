@@ -63,7 +63,7 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 
 **6. Keep the pipeline and change everything under it.** Moving from SSH to cloud deploys didn't mean leaving GitHub Actions. The gates carried over: tests, accessibility checks with Playwright + axe, deploy, smoke test, release tag.
 
-**Bugs no spec predicted, which carry over to other projects:**
+**Bugs from the original port that no spec predicted, which carry over to other projects:**
 - `Referrer-Policy: no-referrer` makes browsers send `Origin: null`, so the CSRF check refused every sign-in.
 - Warm Lambdas keep secrets they read at cold start.
 - WebKit reports a native `<select>` as a CSP violation under a strict policy.
