@@ -106,6 +106,8 @@ jobs:
 
       - name: Install the gate's browsers
         working-directory: tests/gate
+        # A stalled download from the Ubuntu mirror fails here in minutes, not after the job's limit.
+        timeout-minutes: 10
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium firefox webkit
