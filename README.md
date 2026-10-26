@@ -13,7 +13,7 @@ If you run a smaller site on a shared PHP hosting account, a bug like this leave
 I experienced this with a private app I had built with Claude Code for shared PHP hosting. Since every requirement was already written down as a platform-neutral decision, I tried something other than waiting for the patch:
 - **The PHP risk:** I remediated it by regenerating the whole app in Go.
 - **Some of the shared-hosting risk:** I remediated it by moving the hosting to AWS.
-- **Cost:** at the same time, I experimented with extreme cost saving, by seeing whether I could fit it into AWS's free tier.
+- **Cost:** at the same time, I lowered costs by fitting it into AWS's free tier.
 
 It took about a day and a half. This repo repeats that move in public, on a small site anyone can clone, so you can see the steps and reuse them.
 
