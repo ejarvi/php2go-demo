@@ -8,6 +8,11 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # A push that only changes documentation has nothing to deploy.
+    paths-ignore:
+      - '**/*.md'
+      - 'design/**'
+      - 'LICENSE'
   workflow_dispatch:
     inputs:
       run_tests:
