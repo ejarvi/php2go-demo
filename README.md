@@ -106,4 +106,4 @@ This repo goes with a 5-minute demo for AI Tinkerers, "PHP2Go". The notes and so
 
 ## License
 
-[MIT](LICENSE)
+Public domain, under [the Unlicense](LICENSE). Copy it, change it and reuse it for anything, with no credit needed.
