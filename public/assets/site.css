@@ -424,7 +424,9 @@ textarea[aria-invalid="true"] {
   min-width: 8rem;
 }
 
+/* position: relative keeps visually hidden text inside the scrolling box, so it can't widen the page. */
 .table-scroll {
+  position: relative;
   overflow-x: auto;
 }
 

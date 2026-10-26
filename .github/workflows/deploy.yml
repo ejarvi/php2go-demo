@@ -50,7 +50,7 @@ jobs:
       BASE_URL: http://127.0.0.1:8080
       ALT_BASE_URL: http://127.0.0.1:8081
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -58,7 +58,7 @@ jobs:
           extensions: pdo_mysql, mbstring
           coverage: none
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -126,7 +126,7 @@ jobs:
       DB_PORT: ${{ vars.DB_PORT }}
       DB_NAME: ${{ vars.DB_NAME }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Release ID and mode
         run: |
