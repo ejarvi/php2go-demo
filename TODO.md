@@ -32,8 +32,9 @@ What's left before the demo in [presentation.md](presentation.md) can run. As of
 - [x] Same-origin forms (D-025) with Go's `http.CrossOriginProtection`; CloudFront forwards `Origin` and `Sec-Fetch-Site`.
 - [x] Cost tests that fail CI on idle-cost resources, plus tests of the deploy role's limits and the Free plan's rules.
 - [x] The workflow: tests → gate → OIDC → secrets to SSM → `cdk diff`/`deploy` → smoke test → tag. It skips the deploy until `AWS_ROLE_ARN` exists.
-- [ ] **You:** follow `platform/README.md` from Part B: a new project, `aws login`, `cdk bootstrap`, `cdk deploy Php2goGitHub`, and the `aws` GitHub environment.
-- [ ] **You:** push or run the workflow, then subscribe the distribution to CloudFront's Free plan and add `FREE_PLAN_WEB_ACL_ARN` and `SITE_URL` (Part G).
+- [x] Followed `platform/README.md` from Part B: a member account, `aws login` with a role-switching profile, `cdk bootstrap`, `cdk deploy Php2goGitHub`, and the `aws` GitHub environment.
+- [x] First deploy to AWS on 2026-10-26 (r26), green from tests to tag. Deploy logs now mask the site's and the function's addresses.
+- [ ] **You:** add `SITE_URL`, subscribe the distribution to CloudFront's Free plan, and add `FREE_PLAN_WEB_ACL_ARN` before the next deploy (Part G).
 - [ ] Confirm both sites are live side by side with the same sign-up working on each.
 - [ ] Check that the Billing console still shows $0.14 total and $0.00 for hosting.
 - [ ] Save or record the Claude session that regenerated the site, for the demo.
