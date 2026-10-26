@@ -1,6 +1,8 @@
 # The pipeline from design/delivery.md: test → gate → deploy → smoke test → tag (D-017).
-# Where the site runs comes from the "lamp" GitHub environment, never from the repo (D-024).
-# The tests and gate run before every deploy unless switched off (D-026, D-027).
+# main deploys the Go version to AWS: GitHub signs in with OIDC, with no stored keys, and
+# CDK deploys infra/. Where it deploys comes from the "aws" GitHub environment (D-024).
+# The tests and gate run before every deploy unless switched off (D-027).
+# The archived PHP version is on the lamp branch, and deploys from there only by hand.
 name: Deploy
 
 on:
@@ -15,7 +17,7 @@ on:
 
 # One deploy at a time, in push order, and a running deploy is never cancelled (D-013).
 concurrency:
-  group: deploy-lamp
+  group: deploy-aws
   cancel-in-progress: false
 
 permissions:
@@ -34,54 +36,57 @@ jobs:
     name: Test and gate
     if: (github.event_name == 'workflow_dispatch' && inputs.run_tests) || (github.event_name != 'workflow_dispatch' && vars.RUN_TESTS != 'false')
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: ci-root-password
-          MYSQL_DATABASE: club
+      # The real DynamoDB code runs against DynamoDB Local, shared by two copies of the site.
+      dynamodb:
+        image: amazon/dynamodb-local:latest
         ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
+          - 8000:8000
     env:
-      DB_HOST: 127.0.0.1
-      DB_PORT: '3306'
-      DB_NAME: club
-      DB_USER: root
-      DB_PASSWORD: ci-root-password
-      SESSION_SECRET: ci-session-secret
+      SITE_TABLE: php2go-test
+      DYNAMODB_ENDPOINT: http://127.0.0.1:8000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      SESSION_SECRET: ci-session-secret-0123456789abcdef
       ORGANIZER_PASSWORD: contract-test-password
       CLUB_NAME: Riverside Community Club
       CLUB_TIMEZONE: America/Chicago
       # Tests submit forms instantly, so the bot timer is off here (D-011).
       FORM_MIN_SECONDS: '0'
-      PHP_CLI_SERVER_WORKERS: '4'
       # A release ID shaped like a real one, so the release tests compare something real.
       RELEASE: r${{ github.run_number }}+ci
       BASE_URL: http://127.0.0.1:8080
       ALT_BASE_URL: http://127.0.0.1:8081
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/setup-go@v7
         with:
-          php-version: '8.3'
-          extensions: pdo_mysql, mbstring
-          coverage: none
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            infra/go.sum
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: 24
 
-      - name: Check PHP syntax
-        run: find public src bin templates platform -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Go tests
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Infrastructure tests (cost traps, deploy role, Free plan)
+        working-directory: infra
+        run: |
+          go vet ./...
+          go test ./...
 
       - name: Start the site on empty storage
         run: |
+          go build -o dist/site ./cmd/site
           wait_for() {
             for _ in $(seq 1 30); do
               curl -fsS "$1/health" && return 0
@@ -90,10 +95,10 @@ jobs:
             echo "::error::The site at $1 didn't start"
             return 1
           }
-          sh bin/serve-local.sh 8080 > server.log 2>&1 &
+          PORT=8080 dist/site > server.log 2>&1 &
           wait_for "$BASE_URL"
           # A second copy on the same storage with another password, for the password-change test.
-          ORGANIZER_PASSWORD=a-changed-password sh bin/serve-local.sh 8081 > server-alt.log 2>&1 &
+          PORT=8081 ORGANIZER_PASSWORD=a-changed-password dist/site > server-alt.log 2>&1 &
           wait_for "$ALT_BASE_URL"
 
       - name: Acceptance tests
@@ -113,202 +118,158 @@ jobs:
         if: failure()
         run: cat server.log server-alt.log
 
-  # Three SSH keys, each confined on the host to one job (D-015, platform/README.md):
-  # the web key can only rsync into the web root, the app key only into the private app
-  # folder, and the migrate key can only run migrate-gate.php.
   deploy:
-    name: Deploy to lamp
+    name: Deploy to AWS
     needs: test
     # Runs when the tests passed or were switched off, never when they failed.
     if: github.ref == 'refs/heads/main' && !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment:
-      name: lamp
-      # GitHub can't use a secret here, so the link appears only while SITE_URL is a variable.
-      url: ${{ vars.SITE_URL }}
+      name: aws
     permissions:
-      contents: write
+      id-token: write # lets the job ask GitHub for an OIDC token to sign in to AWS
+      contents: write # tag and GitHub Release (D-016)
     env:
-      # Each setting can be an environment secret or variable; a secret wins. A secret's value
-      # is shown as *** in every log, so anything that identifies the host belongs there,
-      # because a public repo's Actions logs are public too.
-      SSH_HOST: ${{ secrets.SSH_HOST || vars.SSH_HOST }}
-      SSH_PORT: ${{ secrets.SSH_PORT || vars.SSH_PORT }}
-      SSH_USER: ${{ secrets.SSH_USER || vars.SSH_USER }}
-      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS || vars.SSH_KNOWN_HOSTS }}
-      APP_DIR: ${{ secrets.APP_DIR || vars.APP_DIR }}
-      SITE_URL: ${{ secrets.SITE_URL || vars.SITE_URL }}
+      # Each setting can be an environment secret or variable; a secret wins, and its value
+      # is shown as *** in every log, because a public repo's Actions logs are public too.
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN || vars.AWS_ROLE_ARN }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID || vars.AWS_ACCOUNT_ID }}
+      AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION }}
       CLUB_NAME: ${{ secrets.CLUB_NAME || vars.CLUB_NAME }}
       CLUB_TIMEZONE: ${{ secrets.CLUB_TIMEZONE || vars.CLUB_TIMEZONE }}
-      DB_HOST: ${{ secrets.DB_HOST || vars.DB_HOST }}
-      DB_PORT: ${{ secrets.DB_PORT || vars.DB_PORT }}
-      DB_NAME: ${{ secrets.DB_NAME || vars.DB_NAME }}
+      SITE_URL: ${{ secrets.SITE_URL || vars.SITE_URL }}
+      FREE_PLAN_WEB_ACL_ARN: ${{ secrets.FREE_PLAN_WEB_ACL_ARN || vars.FREE_PLAN_WEB_ACL_ARN }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - name: Release ID and mode
-        run: |
-          echo "RELEASE=r${GITHUB_RUN_NUMBER}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "REMOTE=${SSH_USER}@${SSH_HOST}" >> "$GITHUB_ENV"
-          # The site is HTTPS only, so a bare domain means https://.
-          case "$SITE_URL" in
-            http://* | https://*) ;;
-            *) echo "SITE_URL=https://${SITE_URL}" >> "$GITHUB_ENV" ;;
-          esac
-          # A dry run checks the keys and lists what would change, but changes nothing.
-          if [ -f .github/dry-run ]; then
-            echo "DRY_RUN=1" >> "$GITHUB_ENV"
-            echo "::notice::Dry run: .github/dry-run is present, so nothing on the host will change."
-          else
-            echo "DRY_RUN=0" >> "$GITHUB_ENV"
-          fi
-
-      - name: Check the lamp environment's settings
+      - name: Check the aws environment's settings
+        id: settings
         env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
           ORGANIZER_PASSWORD: ${{ secrets.ORGANIZER_PASSWORD }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-          SSH_WEB_KEY: ${{ secrets.SSH_WEB_KEY }}
-          SSH_APP_KEY: ${{ secrets.SSH_APP_KEY }}
-          SSH_MIGRATE_KEY: ${{ secrets.SSH_MIGRATE_KEY }}
         run: |
+          echo "RELEASE=r${GITHUB_RUN_NUMBER}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          if [ -z "$AWS_ROLE_ARN" ]; then
+            echo "::notice::AWS isn't connected yet (no AWS_ROLE_ARN in the aws environment), so nothing was deployed. See platform/README.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           missing=0
-          for name in SSH_HOST SSH_USER SSH_KNOWN_HOSTS APP_DIR SITE_URL CLUB_NAME CLUB_TIMEZONE DB_HOST DB_NAME \
-                      DB_USER DB_PASSWORD ORGANIZER_PASSWORD SESSION_SECRET SSH_WEB_KEY SSH_APP_KEY SSH_MIGRATE_KEY; do
+          for name in AWS_ACCOUNT_ID AWS_REGION CLUB_NAME CLUB_TIMEZONE ORIGIN_SECRET ORGANIZER_PASSWORD SESSION_SECRET; do
             if [ -z "${!name}" ]; then
-              echo "::error::The lamp environment is missing $name. See platform/README.md."
+              echo "::error::The aws environment is missing $name. See platform/README.md."
               missing=1
             fi
           done
-          if [ -n "$APP_DIR" ] && ! [[ "$APP_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
-            echo "::error::APP_DIR must be an absolute path, such as /home/<user>/private/php2go."
-            missing=1
+          [ "$missing" = 0 ] || exit 1
+          if [ -f .github/dry-run ]; then
+            echo "DRY_RUN=1" >> "$GITHUB_ENV"
+            echo "::notice::Dry run: .github/dry-run is present, so only cdk diff runs and nothing in AWS changes."
+          else
+            echo "DRY_RUN=0" >> "$GITHUB_ENV"
           fi
-          exit $missing
+          echo "ready=true" >> "$GITHUB_OUTPUT"
 
-      - name: Build the release
-        env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          ORGANIZER_PASSWORD: ${{ secrets.ORGANIZER_PASSWORD }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-        run: |
-          # The app folder gets this release's code, the migrate gate and the settings file.
-          mkdir -p "build/app/releases/$RELEASE" build/web
-          cp -R src templates migrations bin "build/app/releases/$RELEASE/"
-          printf '%s\n' "$RELEASE" > "build/app/releases/$RELEASE/RELEASE"
-          cp platform/migrate-gate.php build/app/
-          # Readable by the site's own account only. rsync keeps these permissions for a new file.
-          (umask 077 && jq -n \
-            --arg DB_HOST "$DB_HOST" --arg DB_PORT "${DB_PORT:-3306}" --arg DB_NAME "$DB_NAME" \
-            --arg DB_USER "$DB_USER" --arg DB_PASSWORD "$DB_PASSWORD" \
-            --arg ORGANIZER_PASSWORD "$ORGANIZER_PASSWORD" --arg SESSION_SECRET "$SESSION_SECRET" \
-            --arg CLUB_NAME "$CLUB_NAME" --arg CLUB_TIMEZONE "$CLUB_TIMEZONE" \
-            '$ARGS.named' > build/app/config.local.json)
-          # The web root gets public/, plus a pointer to this release's code.
-          # Uploading that pointer is what switches the site to the new release.
-          cp -R public/. build/web/
-          printf "<?php\n// Written by the deploy. Never committed.\nreturn '%s';\n" "${APP_DIR%/}/releases/$RELEASE" > build/web/code-path.php
+      - uses: actions/setup-go@v7
+        if: steps.settings.outputs.ready == 'true'
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            infra/go.sum
 
-      - name: Set up SSH
-        env:
-          SSH_WEB_KEY: ${{ secrets.SSH_WEB_KEY }}
-          SSH_APP_KEY: ${{ secrets.SSH_APP_KEY }}
-          SSH_MIGRATE_KEY: ${{ secrets.SSH_MIGRATE_KEY }}
-        run: |
-          install -m 700 -d ~/.ssh
-          # Values pasted on Windows can contain CR characters, which OpenSSH rejects.
-          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
-          opts="-p ${SSH_PORT:-22} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
-          for key in web app migrate; do
-            var="SSH_${key^^}_KEY"
-            printf '%s\n' "${!var}" | tr -d '\r' > "$HOME/.ssh/$key"
-            chmod 600 "$HOME/.ssh/$key"
-            # The public fingerprint, to compare with `ssh-keygen -lf ~/.ssh/authorized_keys` on the host.
-            ssh-keygen -lf "$HOME/.ssh/$key" \
-              || { echo "::error::$var isn't a private key. Paste the whole private key file, not the .pub one."; exit 1; }
-            # Some hosts slow down new SSH connections that arrive in quick succession, so each
-            # key opens one connection now and every later command reuses it. The key's
-            # restrictions on the host still apply to everything sent over it.
-            ssh -i "$HOME/.ssh/$key" $opts -o ControlMaster=yes -o ControlPersist=15m \
-              -o "ControlPath=$HOME/.ssh/cm-$key" -fN "$REMOTE" \
-              || { echo "::error::Couldn't connect with the $key key. Check $var, SSH_HOST, SSH_USER and SSH_KNOWN_HOSTS."; exit 1; }
-            echo "SSH_${key^^}=ssh -i $HOME/.ssh/$key $opts -o ControlMaster=no -o ControlPath=$HOME/.ssh/cm-$key" >> "$GITHUB_ENV"
-          done
+      - uses: actions/setup-node@v7
+        if: steps.settings.outputs.ready == 'true'
+        with:
+          node-version: 24
 
-      # rrsync confines the web and app keys to one folder each, so "/" below means that
-      # folder. If a key weren't confined, "/" would be the host's root, the marker
-      # wouldn't be found there, and nothing would be synced.
-      - name: "Safety: the web and app keys reach only their own folders"
-        run: |
-          check() {
-            if ! rsync --list-only -e "$1" "$REMOTE:/$2" > /dev/null; then
-              echo "::error::The marker /$2 isn't in this key's folder. See platform/README.md."
-              exit 1
-            fi
-            if $1 "$REMOTE" ls > /dev/null 2>&1 < /dev/null; then
-              echo "::error::A deploy key ran a shell command, so it isn't confined. Stopping."
-              exit 1
-            fi
-            if rsync --list-only -e "$1" "$REMOTE:../" > /dev/null 2>&1; then
-              echo "::error::A deploy key can read outside its folder. Stopping."
-              exit 1
-            fi
-          }
-          check "$SSH_WEB" .deploy-target
-          check "$SSH_APP" .app-target
-          echo "The web and app keys are confined."
+      - name: Install the CDK CLI
+        if: steps.settings.outputs.ready == 'true'
+        run: npm install -g aws-cdk@2.1146.1
 
-      # The host may not let the deploy change folder times or permissions, so rsync leaves both alone.
-      - name: 1. Upload the release's code and settings
+      - name: Build the Lambda (Linux, arm64)
+        if: steps.settings.outputs.ready == 'true'
         run: |
-          opts=(-rltzi --omit-dir-times)
-          if [ "$DRY_RUN" = 1 ]; then opts+=(--dry-run); fi
-          rsync "${opts[@]}" -e "$SSH_APP" build/app/ "$REMOTE:/"
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -trimpath \
+            -ldflags "-s -w -X github.com/ejarvi/php2go-demo/internal/platform.ReleaseID=${RELEASE}" \
+            -o dist/lambda/bootstrap ./cmd/site
+          ls -l dist/lambda
 
-      # Checked only now, because the first deploy is what uploads migrate-gate.php.
-      - name: 2. Apply storage changes, before the new code goes live
-        if: env.DRY_RUN == '0'
+      - name: Sign in to AWS (OIDC)
+        if: steps.settings.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: php2go-deploy-${{ github.run_number }}
+
+      - name: "Safety: signed in to the right account"
+        if: steps.settings.outputs.ready == 'true'
         run: |
-          rc=0
-          out=$($SSH_MIGRATE "$REMOTE" ls 2>&1 < /dev/null) || rc=$?
-          if [ "$rc" = 0 ] || ! grep -q 'migrate-gate: expected' <<< "$out"; then
-            echo "::error::The migrate key isn't confined to migrate-gate.php. Stopping. It said: $out"
+          got=$(aws sts get-caller-identity --query Account --output text)
+          if [ "$got" != "$AWS_ACCOUNT_ID" ]; then
+            echo "::error::Signed in to a different account than AWS_ACCOUNT_ID. Stopping."
             exit 1
           fi
-          $SSH_MIGRATE "$REMOTE" "apply $RELEASE" < /dev/null
+          echo "Signed in to the expected account."
 
-      - name: 3. Update the web root, which switches the site to the new release
-        run: |
-          # --delete removes files deleted from public/, but keeps the marker and what the host
-          # manages: certificate checks, cgi-bin, and the per-folder php.ini some hosts use for PHP settings.
-          opts=(-rltzi --omit-dir-times --delete --max-delete=100
-                --filter='P /.deploy-target' --filter='P /.well-known/' --filter='P /cgi-bin/'
-                --filter='P /php.ini' --filter='P /.user.ini')
-          if [ "$DRY_RUN" = 1 ]; then opts+=(--dry-run); fi
-          rsync "${opts[@]}" -e "$SSH_WEB" build/web/ "$REMOTE:/"
+      # The secrets go from GitHub to SSM Parameter Store, in memory only: environment
+      # variables → an SDK call, never a file or a command argument.
+      - name: Write the secrets to SSM Parameter Store
+        if: steps.settings.outputs.ready == 'true' && env.DRY_RUN == '0'
+        env:
+          ORGANIZER_PASSWORD: ${{ secrets.ORGANIZER_PASSWORD }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+        run: go run ./cmd/secrets
+
+      - name: Preview the changes (cdk diff)
+        if: steps.settings.outputs.ready == 'true'
+        working-directory: infra
+        env:
+          ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
+        run: cdk diff Php2go
+
+      - name: Deploy (cdk deploy)
+        if: steps.settings.outputs.ready == 'true' && env.DRY_RUN == '0'
+        working-directory: infra
+        env:
+          ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
+        run: cdk deploy Php2go --require-approval never --outputs-file ../cdk-outputs.json
 
       - name: Smoke test
-        if: env.DRY_RUN == '0'
+        if: steps.settings.outputs.ready == 'true' && env.DRY_RUN == '0'
         run: |
-          url="${SITE_URL%/}/health"
+          site=$(jq -r '.Php2go.SiteUrl' cdk-outputs.json)
+          fnurl=$(jq -r '.Php2go.FunctionUrl' cdk-outputs.json)
+          echo "### The site is live at $site" >> "$GITHUB_STEP_SUMMARY"
           body=""
-          # About a minute, in case the host's PHP caches files for a little while after they change.
-          for _ in $(seq 1 20); do
-            body=$(curl -fsS "$url" || true)
+          ok=0
+          for _ in $(seq 1 18); do
+            body=$(curl -fsS "$site/health" || true)
             if jq -e --arg release "$RELEASE" '.status == "ok" and .release == $release' <<< "$body" > /dev/null 2>&1; then
-              echo "The live site is running $RELEASE"
-              exit 0
+              ok=1
+              break
             fi
-            sleep 3
+            sleep 10
           done
-          echo "::error::$url didn't report release $RELEASE. Last answer: $body"
-          exit 1
+          if [ "$ok" != 1 ]; then
+            echo "::error::$site/health didn't report release $RELEASE. Last answer: $body"
+            exit 1
+          fi
+          echo "The live site is running $RELEASE, and can read its storage."
+          curl -fsSI "$site/" | tr -d '\r' | grep -i '^referrer-policy: same-origin' > /dev/null \
+            || { echo "::error::The security headers are missing"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$fnurl")
+          if [ "$code" != 403 ]; then
+            echo "::error::The function URL answered $code without CloudFront's header; expected 403"
+            exit 1
+          fi
+          echo "The function URL refuses direct requests ($code)."
 
       - name: Tag the release
-        if: env.DRY_RUN == '0'
+        if: steps.settings.outputs.ready == 'true' && env.DRY_RUN == '0'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -317,13 +278,3 @@ jobs:
             exit 0
           fi
           gh release create "$RELEASE" --target "$GITHUB_SHA" --title "$RELEASE" --generate-notes
-
-      - name: Close connections and remove the keys
-        if: always()
-        run: |
-          for key in web app migrate; do
-            if [ -S "$HOME/.ssh/cm-$key" ]; then
-              ssh -o "ControlPath=$HOME/.ssh/cm-$key" -O exit "$REMOTE" 2> /dev/null || true
-            fi
-          done
-          rm -f "$HOME/.ssh/web" "$HOME/.ssh/app" "$HOME/.ssh/migrate" build/app/config.local.json

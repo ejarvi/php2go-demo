@@ -1,6 +1,9 @@
 config.local.json
 build/
+dist/
 node_modules/
 test-results/
 playwright-report/
 server*.log
+infra/cdk.out/
+cdk-outputs.json

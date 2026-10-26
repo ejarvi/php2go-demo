@@ -1,0 +1,12 @@
+{{define "content"}}
+<h1>Delete {{.Event.Title}}?</h1>
+<p>
+  This removes the event and its {{peopleLabel .Event.People}} signed up.
+  It can't be undone.
+</p>
+<form method="post" action="/admin/events/{{.Event.ID}}/delete" class="button-row">
+  <input type="hidden" name="confirm" value="yes">
+  <button type="submit" class="button button-danger">Delete event</button>
+  <a href="/admin/events/{{.Event.ID}}">Cancel</a>
+</form>
+{{end}}

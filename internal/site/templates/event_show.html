@@ -1,0 +1,82 @@
+{{define "content"}}
+{{- $e := .Event}}
+<article class="event">
+  {{- if not $e.Published}}
+    <p class="notice notice-warning"><strong>Draft: not visible to the public</strong></p>
+  {{- end}}
+
+  {{- with .Confirmed}}
+    <div class="notice notice-success" role="status">
+      <p class="notice-title">You're signed up for {{$e.Title}}, {{peopleLabel .}}.</p>
+      <p>{{$e.Day}} · {{$e.Times}} · {{$e.Location}}</p>
+      <p>Save or print this page so you have the details. No email will be sent.</p>
+    </div>
+  {{- end}}
+
+  <h1>{{$e.Title}}</h1>
+  <p class="event-when">{{$e.Day}} · {{$e.Times}}</p>
+  <p class="event-where">{{$e.Location}}</p>
+
+  {{- if $e.Ended}}
+    <p class="notice">This event has ended.</p>
+  {{- else if $e.Limited}}
+    <p class="places">{{if $e.Full}}<strong class="badge">Full</strong>{{else}}{{$e.LeftLabel}}{{end}}</p>
+  {{- end}}
+
+  {{- if $e.HasDesc}}
+    <div class="description"><p>{{$e.Description}}</p></div>
+  {{- end}}
+</article>
+
+<section class="signup" aria-labelledby="signup-heading">
+  <h2 id="signup-heading">Sign up</h2>
+
+  {{- with .Notice}}
+    <p class="notice notice-error" role="alert">{{.}}</p>
+  {{- end}}
+
+  {{- if .CanSignUp}}
+    {{- if .Errors}}
+      <p class="notice notice-error" role="alert">Please fix the highlighted fields.</p>
+    {{- end}}
+    <form method="post" action="/events/{{$e.ID}}/signup" class="form" novalidate>
+      <input type="hidden" name="timer" value="{{.Timer}}">
+
+      <div class="field">
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" maxlength="100" autocomplete="name" required
+          value="{{.Form.Name}}"{{if index .Errors "name"}} aria-invalid="true" aria-describedby="name-error"{{end}}>
+        {{- with index .Errors "name"}}<p class="field-error" id="name-error">{{.}}</p>{{end}}
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <p class="hint" id="email-hint">Only for the organizers to reach you if the event changes.</p>
+        <input id="email" name="email" type="email" maxlength="254" autocomplete="email" required
+          value="{{.Form.Email}}"{{if index .Errors "email"}} aria-invalid="true" aria-describedby="email-hint email-error"{{else}} aria-describedby="email-hint"{{end}}>
+        {{- with index .Errors "email"}}<p class="field-error" id="email-error">{{.}}</p>{{end}}
+      </div>
+
+      <div class="field">
+        <label for="people">How many people, including you</label>
+        <input id="people" name="people" type="number" min="1" max="6" step="1" inputmode="numeric" required
+          value="{{.Form.People}}"{{if index .Errors "people"}} aria-invalid="true" aria-describedby="people-error"{{end}}>
+        {{- with index .Errors "people"}}<p class="field-error" id="people-error">{{.}}</p>{{end}}
+      </div>
+
+      <div class="trap">
+        <label for="website">Leave this field empty</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
+      <button type="submit" class="button">Sign up</button>
+    </form>
+  {{- else if $e.Started}}
+    <p>Sign-ups have closed because this event has started.</p>
+  {{- else if $e.Published}}
+    <p>This event is full, so sign-ups have closed.</p>
+  {{- else}}
+    <p>Sign-ups open once the event is published.</p>
+  {{- end}}
+</section>
+{{end}}

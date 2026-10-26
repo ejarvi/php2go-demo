@@ -1,0 +1,10 @@
+{
+  "app": "go mod download && go run .",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["cdk.out", "*_test.go", "go.sum"]
+  },
+  "context": {
+    "@aws-cdk/core:checkSecretUsage": true
+  }
+}

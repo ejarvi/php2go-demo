@@ -1,0 +1,49 @@
+{{define "content"}}
+<div class="page-heading">
+  <h1>Events</h1>
+  <a class="button" href="/admin/events/new">New event</a>
+</div>
+
+<h2>Upcoming</h2>
+{{- if .Upcoming}}
+  <ul class="admin-events">
+    {{- range .Upcoming}}{{template "admin-row" .}}{{end}}
+  </ul>
+{{- else}}
+  <p>No upcoming events.</p>
+{{- end}}
+
+<h2>Past</h2>
+{{- if .Past}}
+  <ul class="admin-events">
+    {{- range .Past}}{{template "admin-row" .}}{{end}}
+  </ul>
+{{- else}}
+  <p>No past events.</p>
+{{- end}}
+
+<h2>Recent activity</h2>
+{{- if .Activity}}
+  <ul class="activity">
+    {{- range .Activity}}
+      <li>
+        <span class="activity-time">{{shortTime .CreatedAt}}</span>
+        {{.Action}}{{with .EventTitle}}: {{.}}{{end}}
+      </li>
+    {{- end}}
+  </ul>
+{{- else}}
+  <p>Nothing has changed yet.</p>
+{{- end}}
+{{end}}
+
+{{define "admin-row"}}
+    <li class="admin-event">
+      <a href="/admin/events/{{.ID}}">{{.Title}}</a>
+      <span class="admin-event-meta">
+        {{.Day}}
+        · {{if .Published}}Published{{else}}<strong>Draft</strong>{{end}}
+        · {{if .Limited}}{{.People}} / {{.Capacity}}{{else}}{{peopleLabel .People}}{{end}}
+      </span>
+    </li>
+{{- end}}

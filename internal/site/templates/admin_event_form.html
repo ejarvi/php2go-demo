@@ -1,0 +1,120 @@
+{{define "content"}}
+<p><a href="/admin">← All events</a></p>
+<h1>{{with .Event}}{{.Title}}{{else}}New event{{end}}</h1>
+
+{{- if .Saved}}
+  <p class="notice notice-success" role="status">Saved.</p>
+{{- end}}
+
+{{- if .OverCapacity}}
+  <p class="notice notice-warning">{{peopleLabel .Event.People}} {{if eq .Event.People 1}}is{{else}}are{{end}} already signed up.</p>
+{{- end}}
+
+{{- with .Event}}{{if .Published}}
+  <p><a href="/events/{{.ID}}">View the public page</a></p>
+{{- end}}{{end}}
+
+{{- if .Errors}}
+  <p class="notice notice-error" role="alert">Please fix the highlighted fields.</p>
+{{- end}}
+
+<form method="post" action="{{.Action}}" class="form" novalidate>
+  <div class="field">
+    <label for="title">Title</label>
+    <input id="title" name="title" type="text" maxlength="120" required
+      value="{{.Form.Title}}"{{if index .Errors "title"}} aria-invalid="true" aria-describedby="title-error"{{end}}>
+    {{- with index .Errors "title"}}<p class="field-error" id="title-error">{{.}}</p>{{end}}
+  </div>
+
+  <div class="field-row">
+    <div class="field">
+      <label for="date">Date</label>
+      <input id="date" name="date" type="date" required
+        value="{{.Form.Date}}"{{if index .Errors "date"}} aria-invalid="true" aria-describedby="date-error"{{end}}>
+      {{- with index .Errors "date"}}<p class="field-error" id="date-error">{{.}}</p>{{end}}
+    </div>
+    <div class="field">
+      <label for="start_time">Start time</label>
+      <input id="start_time" name="start_time" type="time" required
+        value="{{.Form.StartTime}}"{{if index .Errors "start_time"}} aria-invalid="true" aria-describedby="start_time-error"{{end}}>
+      {{- with index .Errors "start_time"}}<p class="field-error" id="start_time-error">{{.}}</p>{{end}}
+    </div>
+    <div class="field">
+      <label for="end_time">End time (optional)</label>
+      <input id="end_time" name="end_time" type="time"
+        value="{{.Form.EndTime}}"{{if index .Errors "end_time"}} aria-invalid="true" aria-describedby="end_time-error"{{end}}>
+      {{- with index .Errors "end_time"}}<p class="field-error" id="end_time-error">{{.}}</p>{{end}}
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="location">Location</label>
+    <input id="location" name="location" type="text" maxlength="200" required
+      value="{{.Form.Location}}"{{if index .Errors "location"}} aria-invalid="true" aria-describedby="location-error"{{end}}>
+    {{- with index .Errors "location"}}<p class="field-error" id="location-error">{{.}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="6" maxlength="5000"{{if index .Errors "description"}} aria-invalid="true" aria-describedby="description-error"{{end}}>{{.Form.Description}}</textarea>
+    {{- with index .Errors "description"}}<p class="field-error" id="description-error">{{.}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="capacity">Capacity (optional)</label>
+    <input id="capacity" name="capacity" type="number" min="1" max="500" step="1" inputmode="numeric"
+      value="{{.Form.Capacity}}"{{if index .Errors "capacity"}} aria-invalid="true" aria-describedby="capacity-error"{{end}}>
+    {{- with index .Errors "capacity"}}<p class="field-error" id="capacity-error">{{.}}</p>{{end}}
+  </div>
+
+  <div class="field field-check">
+    <input id="published" name="published" type="checkbox" value="1"{{if .Form.Published}} checked{{end}}>
+    <label for="published">Published</label>
+  </div>
+
+  <button type="submit" class="button">{{if .Event}}Save changes{{else}}Create event{{end}}</button>
+</form>
+
+{{- with .Event}}
+  <section aria-labelledby="signups-heading">
+    <h2 id="signups-heading">Sign-ups</h2>
+    {{- if not $.Signups}}
+      <p>Nobody has signed up yet.</p>
+    {{- else}}
+      <div class="table-scroll" role="region" aria-labelledby="signups-heading" tabindex="0">
+        <table>
+          <thead>
+            <tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">People</th><th scope="col">Signed up</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr>
+          </thead>
+          <tbody>
+            {{- range $.Signups}}
+              <tr>
+                <td>{{.Name}}</td>
+                <td>{{.Email}}</td>
+                <td>{{.People}}</td>
+                <td>{{shortTime .CreatedAt}}</td>
+                <td>
+                  <form method="post" action="/admin/signups/{{.ID}}/delete" class="inline-form">
+                    <button type="submit" class="link-button">Remove<span class="visually-hidden"> {{.Name}}</span></button>
+                  </form>
+                </td>
+              </tr>
+            {{- end}}
+          </tbody>
+          <tfoot>
+            <tr><th scope="row">Total</th><td></td><td>{{$.Total}}</td><td></td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <p><a href="/admin/events/{{.ID}}/signups.csv">Download CSV</a></p>
+    {{- end}}
+  </section>
+
+  <section aria-labelledby="delete-heading">
+    <h2 id="delete-heading">Delete this event</h2>
+    <form method="post" action="/admin/events/{{.ID}}/delete">
+      <button type="submit" class="button button-danger">Delete event…</button>
+    </form>
+  </section>
+{{- end}}
+{{end}}
