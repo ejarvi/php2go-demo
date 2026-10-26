@@ -1,6 +1,6 @@
 # Demo prep: to do
 
-What's left before the demo in [presentation.md](presentation.md) can run. As of 2026-10-25, the design is written and the `lamp` site's code, tests and workflow are written but have never been run.
+What's left before the demo in [presentation.md](presentation.md) can run. As of 2026-10-26, the `lamp` site is live, deployed by GitHub Actions, and its tests pass.
 
 ## Design first
 
@@ -13,10 +13,11 @@ What's left before the demo in [presentation.md](presentation.md) can run. As of
 ## Before: `lamp`
 
 - [x] Build the PHP 8 + MySQL site from the specs, in `public/`, `src/`, `templates/` and `migrations/`. Setup and choices are in `platform/README.md`.
-- [ ] Push and get CI green: PHP syntax check, contract tests, then the Playwright + axe gate. None of it has run yet, because nothing needed is installed locally.
-- [ ] Follow the one-time setup in `platform/README.md`, steps A–E: the host, the database, the host's key, the three confined deploy keys, and the `lamp` GitHub environment's variables and secrets.
+- [x] Push and get CI green: PHP syntax check, contract tests, then the Playwright + axe gate. All passed on 2026-10-26. They're now off by default and switched on when wanted (D-026).
+- [x] Follow the one-time setup in `platform/README.md`, steps A–E: the host, the database, the host's key, the three confined deploy keys, and the `lamp` GitHub environment's variables and secrets.
 - [x] Write the GitHub Actions workflow: tests → Playwright + axe gate → rsync deploy → smoke test → release tag.
-- [ ] Deploy it, with a dry run first (steps 21–23), and confirm `/health` shows the release.
+- [x] Deploy it, with a dry run first (steps 21–23), and confirm `/health` shows the release. First live release: r7, on 2026-10-26.
+- [ ] Sign in on the live site and create the demo events (step 23).
 
 ## The move
 
