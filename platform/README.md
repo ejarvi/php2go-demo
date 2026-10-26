@@ -1,5 +1,7 @@
 # Platform: LAMP on shared hosting
 
+> **Archived:** this branch is the PHP version kept for the before-and-after demo. Its deploy runs only by hand: Actions → **Deploy** → **Run workflow** → branch `lamp`. In the `lamp` environment's **Deployment branches and tags**, add `lamp` (step 17 below originally allowed only `main`).
+
 This branch's implementation of the design in [design/](../design/). The design doesn't name a platform (D-002); this folder records the choices this implementation makes, and the one-time setup it needs (D-014).
 
 ## Choices

@@ -1,5 +1,7 @@
 # PHP2Go
 
+> **This is the archived `lamp` branch:** the PHP and MySQL version, as it was before the move. It deploys to shared hosting only when the Deploy workflow is run by hand on this branch. The `main` branch is the Go version on AWS.
+
 **A typical PHP/MySQL shared-hosting site, regenerated in Go on AWS from the same specs with Claude Code.** Both versions are deployed by GitHub Actions. The move cuts hosting cost to a $0 target and replaces SSH deploy keys with short-lived OIDC credentials.
 
 > **Status: work in progress.** This README describes what the repo is for and how it's laid out. The branches are being built, and sections marked *(coming)* will be filled in as they land.

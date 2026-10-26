@@ -1,11 +1,13 @@
 # The pipeline from design/delivery.md: test → gate → deploy → smoke test → tag (D-017).
 # Where the site runs comes from the "lamp" GitHub environment, never from the repo (D-024).
 # The tests and gate run before every deploy unless switched off (D-026, D-027).
+#
+# Archived LAMP version: this branch deploys only when run by hand (Actions → Deploy →
+# Run workflow → branch lamp). main now deploys the Go version to AWS. The lamp environment
+# must allow the lamp branch under Deployment branches.
 name: Deploy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       run_tests:
@@ -120,7 +122,7 @@ jobs:
     name: Deploy to lamp
     needs: test
     # Runs when the tests passed or were switched off, never when they failed.
-    if: github.ref == 'refs/heads/main' && !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    if: github.ref == 'refs/heads/lamp' && !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment:
