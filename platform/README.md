@@ -104,23 +104,22 @@ AWS changes its sign-up often. Check https://aws.amazon.com/free on the day.
    - **Cost Anomaly Detection:** keep the default services monitor, with an email alert at $1;
    - **Account → Alternate contacts:** your everyday email for Billing, Operations and Security.
 
-### Part B. A new project for this site
+### Part B. A new account for this site
 
-1. **Create a project** in **AWS Settings**, signed in with your Builder ID ([AWS's guide](https://docs.aws.amazon.com/accounts/latest/reference/create-project.html)):
-   - Open https://settings.aws.com, or choose **Manage projects** in the console.
-   - **Project → Create project.** Name it, for example, `php2go`: letters, digits and periods only.
-   - AWS assigns the region from your contact address: **US East (Ohio), `us-east-2`**, for a US address.
-   - A project is its own AWS account inside your organization, so this site's resources, its OIDC provider and its bill stay separate. Its billing still rolls up to the organization's.
-   - **Don't create it as the root user under AWS Organizations → Add an AWS account.** That makes a plain member account. It has no access for your Builder ID, isn't listed in your sessions, and can't be fixed with an Identity Center assignment.
-2. **Open the project's console.** Each project is its own account, opened through your Builder ID, not a root user:
-   - In the account menu (top right), choose **Turn on multi-session support** if it's offered. It lets one browser keep up to five sessions open, such as the management account and this project.
-   - Then choose **Add session**, sign in with your Builder ID, and pick the new project. Without multi-session support, sign out and sign back in, then pick the project.
-   - The account menu shows the project's name and account ID. The consoles look identical, so check it before changing anything.
-3. **Note its account ID.** Either read it in the management account under **AWS Organizations → AWS accounts**, or open **CloudShell** in the project's session and run:
-   ```sh
-   aws sts get-caller-identity --query Account --output text
-   ```
-   That's `AWS_ACCOUNT_ID`. It isn't a credential, but keep it out of public places.
+With advanced features on, a new project in your organization is a **member account**. AWS Settings → **Create project** would instead create a whole new organization, with its own billing and Free plan, so don't use it.
+
+1. **Create the member account,** in a **management account** session signed in with your Builder ID (not root):
+   - **AWS Organizations → AWS accounts → Add an AWS account → Create an AWS account.**
+   - **Account name:** for example `demo`. It's only a label; the code uses the account ID.
+   - **Email:** one no other AWS account uses, even a closed one, which keeps its email for 90 days. A plus-address such as `you+awsdemo@example.com` works with most mail providers.
+   - **IAM role name:** leave it as `OrganizationAccountAccessRole`.
+   - Refresh **AWS accounts** until the new account shows **Active**. Its account ID is `AWS_ACCOUNT_ID`. It isn't a credential, but keep it out of public places.
+   - The account sits under the organization root, so the organization's guardrails and zero-spend budget cover it.
+2. **Open it with Switch role.** A member account created this way isn't listed in your Builder ID's sessions, and an Identity Center assignment copied from an older project won't work.
+   - Optional: in the account menu (top right), **Turn on multi-session support** to keep several accounts open in one browser.
+   - In the management account session: account menu → **Switch role**.
+   - **Account ID:** the new account's. **IAM role name:** `OrganizationAccountAccessRole`. **Display name:** `demo`, with a color.
+   - The account menu then shows `demo` in that color, with administrator access. The consoles look identical, so check it before changing anything. Next time, `demo` is listed under **Switch role**.
 
 ### Part C. Tools on your PC
 
@@ -132,18 +131,24 @@ AWS changes its sign-up often. Check https://aws.amazon.com/free on the day.
    ```
    Then install the CDK CLI: `npm install -g aws-cdk@2.1146.1`.
    - Run the installs from an admin terminal. A silent install started from a normal one can hang invisibly and block later installs with exit code 1618 until a restart.
-2. **Sign in from the command line** with your Builder ID, and choose the new project's account:
+2. **Sign the CLI in to the management account** with your Builder ID. At the account prompt, choose the management account:
    ```powershell
-   aws login --profile php2go --region <region>
-   aws configure set region <region> --profile php2go
-   aws sts get-caller-identity --profile php2go
+   aws login --profile jarvi --region us-east-2
    ```
    If `aws login` offers to set up an AI agent's access to the account, answer **n**.
-3. **Give CDK the credentials.** CDK doesn't renew `aws login` credentials itself, so before each CDK command, in the same terminal:
+3. **Add a profile that switches into the new account.** Open `notepad $HOME\.aws\config` and add:
+   ```ini
+   [profile php2go]
+   source_profile = jarvi
+   role_arn = arn:aws:iam::<new account ID>:role/OrganizationAccountAccessRole
+   region = us-east-2
+   ```
+   Check it shows the **new** account's ID: `aws sts get-caller-identity --profile php2go`.
+4. **Give CDK the credentials.** CDK doesn't renew these itself, so before each CDK command, in the same terminal:
    ```powershell
    aws configure export-credentials --profile php2go --format powershell | Invoke-Expression
    ```
-   These are temporary credentials (about an hour), held only in that terminal. Never print `$env:AWS_SECRET_ACCESS_KEY`.
+   These are temporary credentials (about an hour), held only in that terminal. Never print `$env:AWS_SECRET_ACCESS_KEY`. If they expire, run `aws login --profile jarvi` again, then this step.
 
 ### Part D. Bootstrap CDK
 
@@ -162,7 +167,7 @@ Watch it under **CloudFormation → Stacks → CDKToolkit**.
    - If it shows `"use_immutable_subject":true` with a `sub_claim_prefix`, the subject is that prefix plus `:environment:aws`, for example `repo:<owner>@<owner id>/<repo>@<repo id>:environment:aws`.
    - Otherwise it's `repo:<owner>/<repo>:environment:aws`.
    - In the other project, the plain form was refused on the first CI run because the repo used the immutable format, so check rather than guess.
-2. **Deploy the GitHub stack from your PC,** in the terminal from step C3. CI can't create the role it signs in with, so this one stack is deployed by hand:
+2. **Deploy the GitHub stack from your PC,** in the terminal from step C4. CI can't create the role it signs in with, so this one stack is deployed by hand:
    ```powershell
    cd infra
    $env:AWS_ACCOUNT_ID = '<account ID>'
@@ -204,7 +209,7 @@ Watch it under **CloudFormation → Stacks → CDKToolkit**.
 
 - **"explicit deny in a service control policy":** an organization guardrail blocked the action. See step A6. Before activation, the Free plan's guardrail is what blocks the OIDC provider.
 - **The deploy can't assume the role** (`Not authorized to perform sts:AssumeRoleWithWebIdentity`): the role's subject doesn't match. Check step E1, then redeploy `Php2goGitHub`.
-- **CDK says no credentials are configured:** run step C3 again; the exported credentials last about an hour.
+- **CDK says no credentials are configured:** run steps C2 and C4 again; the exported credentials last about an hour.
 - **The smoke test sees the old release:** CloudFront and Lambda usually switch within a minute. The test waits three. Run it again before digging deeper.
 - **The function URL answers 200 instead of 403:** the Lambda isn't checking `ORIGIN_SECRET`. Make sure the secret is set, then redeploy.
 
