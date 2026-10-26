@@ -109,28 +109,18 @@ jobs:
       - name: Acceptance tests
         run: node --test --test-concurrency=1 'tests/contract/*.test.mjs'
 
-      # GitHub's Ubuntu mirror sometimes stalls mid-download. With these, a stalled download
-      # times out in seconds and is retried, instead of hanging the step.
-      - name: Make apt retry stalled downloads
-        run: |
-          sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null <<'APT'
-          Acquire::Retries "5";
-          Acquire::http::Timeout "20";
-          Acquire::https::Timeout "20";
-          APT
-
-      - name: Install the gate's browsers
-        working-directory: tests/gate
-        # A stalled download from the Ubuntu mirror fails here in minutes, not after the job's limit.
-        timeout-minutes: 10
-        run: |
-          npm install --no-audit --no-fund
-          npx playwright install --with-deps chromium firefox webkit
-
+      # The gate runs in Microsoft's Playwright image, which already has the three browsers and
+      # their system libraries. Installing those with apt from GitHub's Ubuntu mirror stalled
+      # repeatedly. The image's version must match @playwright/test in tests/gate/package.json.
+      # --network host lets it reach the site started above on 127.0.0.1.
       - name: Accessibility and layout gate
-        working-directory: tests/gate
-        timeout-minutes: 12
-        run: npx playwright test
+        timeout-minutes: 15
+        run: |
+          docker run --rm --network host --ipc host \
+            -v "$PWD:/work" -w /work/tests/gate \
+            -e CI=true -e BASE_URL -e ORGANIZER_PASSWORD -e CLUB_TIMEZONE \
+            mcr.microsoft.com/playwright:v1.64.1-noble \
+            bash -c 'npm install --no-audit --no-fund && npx playwright test'
 
       - name: Show the server logs
         if: failure()
