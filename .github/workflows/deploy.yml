@@ -239,14 +239,28 @@ jobs:
         working-directory: infra
         env:
           ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
-        run: cdk deploy Php2go --require-approval never --outputs-file ../cdk-outputs.json
+        # CDK prints the stack's outputs, the site's and the function's addresses. In a public repo
+        # the log is public, so the output is held back until those values are masked.
+        run: |
+          status=0
+          cdk deploy Php2go --require-approval never --outputs-file ../cdk-outputs.json > ../cdk-deploy.log 2>&1 || status=$?
+          if [ -f ../cdk-outputs.json ]; then
+            for url in $(jq -r '.Php2go | .SiteUrl, .FunctionUrl' ../cdk-outputs.json); do
+              host=${url#https://}
+              echo "::add-mask::$url"
+              echo "::add-mask::${url%/}"
+              echo "::add-mask::${host%/}"
+            done
+          fi
+          cat ../cdk-deploy.log
+          exit $status
 
       - name: Smoke test
         if: steps.settings.outputs.ready == 'true' && env.DRY_RUN == '0'
         run: |
           site=$(jq -r '.Php2go.SiteUrl' cdk-outputs.json)
           fnurl=$(jq -r '.Php2go.FunctionUrl' cdk-outputs.json)
-          echo "### The site is live at $site" >> "$GITHUB_STEP_SUMMARY"
+          echo "### The site is live, running $RELEASE" >> "$GITHUB_STEP_SUMMARY"
           body=""
           ok=0
           for _ in $(seq 1 18); do
