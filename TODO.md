@@ -21,26 +21,27 @@ What's left before the demo in [presentation.md](presentation.md) can run. As of
 
 ## The move
 
-- [ ] Put the PHP code on the `lamp` branch for archival, and keep its environment and deploys working. On `lamp`, change the workflow to run only by hand (`workflow_dispatch`), and add `lamp` to the `lamp` environment's deployment branches, which currently allow only `main`.
-- [ ] Create the `aws` branch and make it the repo's default branch.
-- [ ] Have Claude regenerate each module in Go on `aws`, in `cmd/` and `internal/`, until the contract tests pass. Save the session so it can be shown in the demo.
+- [x] Put the PHP code on the `lamp` branch for archival (tag `lamp-final`). Its workflow now runs only by hand.
+- [ ] In the `lamp` environment, add `lamp` under **Deployment branches and tags**, so the archived version can still be deployed by hand.
+- [x] `main` becomes the Go version, as in the other project (no separate `aws` branch, so the default branch stays `main`).
+- [x] Claude regenerated each module in Go in `cmd/` and `internal/`. It compiled first time; the acceptance tests and gate run against it in CI.
 
-## After: `aws`
+## After: Go on AWS (`main`)
 
-- [ ] Write the CDK stack in Go in `infra/`: CloudFront flat-rate Free plan → Lambda (arm64, `provided.al2023`) → DynamoDB, with secrets in SSM Parameter Store.
-- [ ] Enforce same-origin forms (D-025) the Go way, for example with Go 1.25's `http.CrossOriginProtection`, and record the choice in `platform/`. Make CloudFront forward the `Origin` and `Sec-Fetch-Site` headers to Lambda. Without them, the Lambda can't tell where a request came from. Its `Host` is also the Lambda's own address, not the site's, so an `Origin` comparison would refuse every form. Contract tests site 6 and signups 6 must pass.
-- [ ] Add the cost tests that fail CI on idle-cost resources (NAT gateway, load balancer, public IPv4, Secrets Manager).
-- [ ] Set up the GitHub OIDC provider and a deploy role scoped to this repo, the `aws` branch and this stack. This needs the AWS Paid plan.
-- [ ] Create the `aws` GitHub environment holding only the role ARN, with no secrets.
-- [ ] Write the workflow: tests → Playwright + axe gate → cost gate → OIDC → `cdk deploy` → smoke test → release tag.
-- [ ] Set up AWS Budgets with zero-spend alerts and Cost Anomaly Detection.
-- [ ] Deploy, and confirm both sites are live side by side with the same sign-up working on each.
+- [x] CDK stacks in Go in `infra/`: `Php2goGitHub` (OIDC provider and deploy role) and `Php2go` (DynamoDB, Lambda arm64, function URL, CloudFront with the secret origin header).
+- [x] Same-origin forms (D-025) with Go's `http.CrossOriginProtection`; CloudFront forwards `Origin` and `Sec-Fetch-Site`.
+- [x] Cost tests that fail CI on idle-cost resources, plus tests of the deploy role's limits and the Free plan's rules.
+- [x] The workflow: tests → gate → OIDC → secrets to SSM → `cdk diff`/`deploy` → smoke test → tag. It skips the deploy until `AWS_ROLE_ARN` exists.
+- [ ] **You:** follow `platform/README.md` from Part B: a new project, `aws login`, `cdk bootstrap`, `cdk deploy Php2goGitHub`, and the `aws` GitHub environment.
+- [ ] **You:** push or run the workflow, then subscribe the distribution to CloudFront's Free plan and add `FREE_PLAN_WEB_ACL_ARN` and `SITE_URL` (Part G).
+- [ ] Confirm both sites are live side by side with the same sign-up working on each.
 - [ ] Check that the Billing console still shows $0.14 total and $0.00 for hosting.
+- [ ] Save or record the Claude session that regenerated the site, for the demo.
 
 ## Notes and docs
 
 - [ ] Check the three "Bugs from the original port" fixes in presentation.md against what the private app actually does. They were written from standard practice, not from its code. The WebKit `<select>` one is the least certain.
-- [ ] Fill in the README's *(coming)* sections: the repo layout as built, and how to run it.
+- [x] Fill in the README's *(coming)* sections: the repo layout as built, and how to run it.
 - [ ] If the build changes anything the talk claims, update presentation.md to match.
 
 ## Rehearsal

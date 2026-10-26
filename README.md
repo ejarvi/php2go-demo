@@ -2,7 +2,7 @@
 
 **A typical PHP/MySQL shared-hosting site, regenerated in Go on AWS from the same specs with Claude Code.** Both versions are deployed by GitHub Actions. The move cuts hosting cost to a $0 target and replaces SSH deploy keys with short-lived OIDC credentials.
 
-> **Status: work in progress.** This README describes what the repo is for and how it's laid out. The branches are being built, and sections marked *(coming)* will be filled in as they land.
+> **Status:** the PHP version is live and archived on the `lamp` branch. The Go version on AWS is built on `main` and passes the same acceptance tests and accessibility gate. Its first AWS deploy waits for the one-time AWS setup in [platform/README.md](platform/README.md).
 
 ## Why this exists
 
@@ -33,7 +33,9 @@ It deliberately sends no email, which keeps the demo free of mail setup.
 
 ## Two branches
 
-| | `lamp` | `aws` |
+`lamp` is the original PHP version, archived and deployed only by hand. `main` is the Go version on AWS, deployed on every push.
+
+| | `lamp` | `main` (AWS) |
 |---|---|---|
 | Language | PHP 8.x | Go (standard library first) |
 | Data | MySQL | DynamoDB (one table, inside the always-free allowance) |
@@ -48,7 +50,7 @@ Both branches use the same pipeline in the same order: **test → gate → deplo
 
 ## Three things to look at
 
-**1. Cost.** "Free tier" is treated as a design constraint, so it has a test. The `aws` branch's infrastructure tests fail the deploy if the planned resources include anything that costs money while idle:
+**1. Cost.** "Free tier" is treated as a design constraint, so it has a test. The Go version's infrastructure tests fail the deploy if the planned resources include anything that costs money while idle:
 
 | Resource | Typical cost |
 |---|---|
@@ -59,7 +61,7 @@ Both branches use the same pipeline in the same order: **test → gate → deplo
 
 Zero-spend budget alerts and AWS Cost Anomaly Detection are the backstop.
 
-**2. Security.** On `lamp`, a private SSH key lives in GitHub secrets, confined on the server with `rrsync`. On `aws`, there are no stored deploy keys at all. GitHub Actions gets a short-lived role through OIDC, scoped to one repo, one branch and one stack.
+**2. Security.** On `lamp`, a private SSH key lives in GitHub secrets, confined on the server with `rrsync`. On `main`, there are no stored deploy keys at all. GitHub Actions gets a short-lived role through OIDC, scoped to one repo, one branch and one stack.
 
 **3. The same pipeline.** Moving from SSH to cloud deploys doesn't mean leaving GitHub Actions. The quality gates carry over unchanged: tests, then accessibility checks with Playwright + axe-core, then deploy.
 
@@ -86,7 +88,7 @@ tests/gate/         accessibility and layout checks (Playwright + axe-core)
 ```
 
 On `lamp`: `public/` (the web root), `src/` and `templates/` (PHP), `migrations/` (SQL), `bin/` (migrations and a local server).
-On `aws` *(coming)*: `cmd/`, `internal/` (Go modules), `infra/` (CDK and its cost tests).
+On `main`: `cmd/`, `internal/` (Go), `web/` (the stylesheet), `infra/` (CDK and its cost tests).
 
 ## Running it
 
@@ -97,7 +99,7 @@ See [platform/README.md](platform/README.md) for running the site and its tests 
 - **Claude Code** (Claude Opus): writes the specs, the decisions, both implementations, the infrastructure, the workflows and the tests, working design-first.
 - **GitHub Actions** with **GitHub OIDC** for CI/CD.
 - **PHP 8, MySQL and Apache** on `lamp`.
-- **Go, AWS Lambda, CloudFront, DynamoDB, SSM Parameter Store and AWS CDK** on `aws`.
+- **Go, AWS Lambda, CloudFront, DynamoDB, SSM Parameter Store and AWS CDK** on `main`.
 - **Playwright + axe-core** for accessibility checks.
 
 ## Talk

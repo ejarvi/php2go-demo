@@ -8,7 +8,7 @@ I also used Claude to help develop this presentation, including these notes.
 
 ## In one paragraph
 
-PHP2Shell showed what PHP on shared hosting really costs a small site. Your security depends on a hosting provider's patch schedule and on a thinly staffed upstream. I'd built a private app on that stack with Claude Code. When PHP2Shell landed, I had Claude regenerate it in Go on AWS from its specs and decision log, in about a day and a half. This repo repeats that move on a typical small PHP site, with a `lamp` branch and an `aws` branch, so the steps are reusable.
+PHP2Shell showed what PHP on shared hosting really costs a small site. Your security depends on a hosting provider's patch schedule and on a thinly staffed upstream. I'd built a private app on that stack with Claude Code. When PHP2Shell landed, I had Claude regenerate it in Go on AWS from its specs and decision log, in about a day and a half. This repo repeats that move on a typical small PHP site, with the PHP version archived on a `lamp` branch and the Go version on `main`, so the steps are reusable.
 
 The talk rests on three points:
 1. **Lower cost:** paid shared hosting → AWS at a $0 target, enforced in CI.
@@ -34,9 +34,9 @@ The demo is a before and after: it opens on the PHP site, walks through the move
 | Time | On screen | Point |
 |------|-----------|-------|
 | 0:00–0:30 | **Before:** the `lamp` site running in the browser | PHP2Shell, and the decision to leave PHP instead of waiting for the next patch. |
-| 0:30–1:15 | `design/decisions.md` → a module spec → the finished Claude session that regenerated it on `aws` → contract tests pass | What I maintain is the specs. None of them mention PHP or Go. |
-| 1:15–2:00 | **The move, in GitHub:** the branches page, then Settings → Environments | The PHP code is archived on the `lamp` branch, and its `lamp` environment still holds its SSH deploy secrets. The default branch is now `aws`, and the new `aws` environment holds no secrets, only a role ARN. `lamp` depends on PHP, Apache, Linux and the host for patches; `aws` depends on one binary and a short `go.mod`. |
-| 2:00–2:45 | **The pipeline:** the `aws` workflow file, then a green run in GitHub Actions: tests → accessibility gate → cost gate → OIDC → `cdk deploy` → smoke test → release tag | Same platform and same gates as `lamp`, new target. The SSH key became a short-lived OIDC role. |
+| 0:30–1:15 | `design/decisions.md` → a module spec → the finished Claude session that regenerated it in Go on `main` → contract tests pass | What I maintain is the specs. None of them mention PHP or Go. |
+| 1:15–2:00 | **The move, in GitHub:** the branches page, then Settings → Environments | The PHP code is archived on the `lamp` branch, and its `lamp` environment still holds its SSH deploy secrets. `main` is now the Go version, and its new `aws` environment holds no deploy keys, only a role ARN that GitHub signs in to with OIDC. `lamp` depends on PHP, Apache, Linux and the host for patches; `main` depends on one binary and a short `go.mod`. |
+| 2:00–2:45 | **The pipeline:** the `main` workflow file, then a green run in GitHub Actions: tests → accessibility gate → cost gate → OIDC → `cdk deploy` → smoke test → release tag | Same platform and same gates as `lamp`, new target. The SSH key became a short-lived OIDC role. |
 | 2:45–3:45 | **After:** both sites side by side in the browser, the same sign-up submitted on each | Same site, same contract tests, new stack. *Pause here for the audience.* |
 | 3:45–4:30 | **Cost:** the AWS Billing and Cost Management console showing $0.14 | Hosting costs $0.00. The whole $0.14 is Bedrock playground queries, paid from free credits, and they completed an AWS credit challenge that paid out $20 in more credit. Net, the account is ahead. |
 | 4:30–5:00 | — | Write your decisions down, and the next PHP2Shell is a rebuild, not an emergency. |
@@ -46,12 +46,12 @@ The demo is a before and after: it opens on the PHP site, walks through the move
 Five minutes leaves no time to navigate, so open these beforehand and flip left to right:
 
 1. **Browser:** the `lamp` site.
-2. **Editor:** `design/decisions.md` and one module spec; a terminal with the contract tests already passing on `aws`.
-3. **GitHub:** the repo's branches page, showing `aws` as the default branch and `lamp` kept for archival.
-4. **GitHub:** Settings → Environments, with `lamp` and `aws` listed. Open `aws` to show that it has no secrets.
-5. **GitHub:** the `aws` deploy workflow file, ideally split beside the `lamp` one.
-6. **GitHub Actions:** the latest green `aws` run, with the job graph expanded.
-7. **Browser:** the `lamp` and `aws` sites in side-by-side windows.
+2. **Editor:** `design/decisions.md` and one module spec; a terminal with the contract tests already passing on `main`.
+3. **GitHub:** the repo's branches page, showing `main` (now Go) and `lamp` kept for archival, with its `lamp-final` tag.
+4. **GitHub:** Settings → Environments, with `lamp` and `aws` listed. Open `aws` to show that it has no deploy keys, only a role ARN.
+5. **GitHub:** the deploy workflow on `main`, ideally split beside the one on `lamp`.
+6. **GitHub Actions:** the latest green run on `main`, with the job graph expanded.
+7. **Browser:** the `lamp` and AWS sites in side-by-side windows.
 8. **AWS console:** Billing and Cost Management, showing month-to-date and total spend.
 
 Don't trigger a deploy live: a CDK deploy takes longer than the whole slot. Show a completed run, and keep screenshots of each tab in case the conference Wi-Fi or a sign-in fails.
@@ -109,7 +109,7 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 - **Claude Code (Claude Opus) in VS Code:** specs, decision log, both implementations, the CDK stack, workflows, and cost and security tests.
 - **GitHub Actions + GitHub OIDC:** CI/CD for both branches.
 - **`lamp`:** PHP 8, MySQL and Apache on shared hosting, deployed with rsync over SSH.
-- **`aws`:**
+- **`main` (AWS):**
   - Go.
   - Lambda (arm64, `provided.al2023`) behind CloudFront's flat-rate Free plan.
   - DynamoDB.
