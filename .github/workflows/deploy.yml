@@ -142,6 +142,11 @@ jobs:
         run: |
           echo "RELEASE=r${GITHUB_RUN_NUMBER}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "REMOTE=${SSH_USER}@${SSH_HOST}" >> "$GITHUB_ENV"
+          # The site is HTTPS only, so a bare domain means https://.
+          case "$SITE_URL" in
+            http://* | https://*) ;;
+            *) echo "SITE_URL=https://${SITE_URL}" >> "$GITHUB_ENV" ;;
+          esac
           # A dry run checks the keys and lists what would change, but changes nothing.
           if [ -f .github/dry-run ]; then
             echo "DRY_RUN=1" >> "$GITHUB_ENV"
@@ -268,9 +273,11 @@ jobs:
 
       - name: 3. Update the web root, which switches the site to the new release
         run: |
-          # --delete removes files deleted from public/, but keeps the marker and what the host manages.
+          # --delete removes files deleted from public/, but keeps the marker and what the host
+          # manages: certificate checks, cgi-bin, and the per-folder php.ini some hosts use for PHP settings.
           opts=(-rltzi --omit-dir-times --delete --max-delete=100
-                --filter='P /.deploy-target' --filter='P /.well-known/' --filter='P /cgi-bin/')
+                --filter='P /.deploy-target' --filter='P /.well-known/' --filter='P /cgi-bin/'
+                --filter='P /php.ini' --filter='P /.user.ini')
           if [ "$DRY_RUN" = 1 ]; then opts+=(--dry-run); fi
           rsync "${opts[@]}" -e "$SSH_WEB" build/web/ "$REMOTE:/"
 
