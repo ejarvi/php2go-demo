@@ -88,13 +88,15 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 **Bugs from the original port that no spec predicted, which carry over to other projects:**
 - `Referrer-Policy: no-referrer` makes browsers send `Origin: null`, so the CSRF check refused every sign-in.
   - **Why it was new:** the PHP version used session tokens for CSRF protection and never read the `Origin` header. The Go version runs on Lambda without server-side sessions, so it checks that a form's `Origin` matches the site instead. The new stack also sent strict security headers, including `no-referrer`. Under that policy, browsers hide the origin of cross-site and same-site form posts alike and send `Origin: null`, so every sign-in looked like a forgery.
-  - **The fix:** loosen the policy to `strict-origin-when-cross-origin`, which still keeps full URLs from leaking to other sites but lets the browser send the real `Origin`.
+  - **The fix, in two parts:**
+    - **The header:** send `Referrer-Policy: same-origin` instead (D-019). Pages on the site still get the real `Origin`, so the check works, and other sites still get no referrer at all.
+    - **The rule:** write it down as an outcome, not a mechanism (D-025): a form post that a browser marks as coming from another origin, including another subdomain, gets 403 and changes nothing. Each platform enforces it its own way. The PHP version checks a signed token plus the browser's `Sec-Fetch-Site` and `Origin` headers. The Go version can use Go 1.25's built-in `http.CrossOriginProtection`, which needs no tokens or sessions. The shared contract tests check the outcome: same-origin sign-in works, and posts from another site or subdomain are refused. So the next mismatch like this fails a test instead of every sign-in.
 - Warm Lambdas keep secrets they read at cold start.
   - **Why it was new:** PHP starts fresh on every request and rereads its config each time, so a changed password or key takes effect right away. A Go binary on Lambda keeps running between requests, and it reads its secrets from SSM once, at startup, to keep requests fast and cheap. After a secret changed, warm instances kept using the old value, and only new instances picked up the new one.
   - **The fix:** treat a secret change as a deploy. Redeploying the function replaces every warm instance, so they all start again with the new value.
 - WebKit reports a native `<select>` as a CSP violation under a strict policy.
   - **Why it was new:** the PHP site on shared hosting had no Content Security Policy. The Go version sends a strict one, and the Playwright gate fails on any CSP violation in any browser. Safari's engine, WebKit, styles its built-in dropdown in a way that a strict `style-src` reports as a violation, even though the page's own code does nothing wrong.
-  - **The fix:** have the test ignore that one known WebKit report, rather than loosening the policy for every browser.
+  - **The fix:** have the test ignore that one known WebKit report, rather than loosening the policy for every browser. This demo avoids the problem entirely: its only choice from a list, the head count, is a number field instead of a `<select>`, and the gate passes in all three engines with the strict policy.
 
 **Four things to apply even if you never use this code:**
 1. Maintain specs and decisions, not just code, so a platform move is a rebuild rather than a rewrite.
