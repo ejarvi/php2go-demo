@@ -73,20 +73,24 @@ These came up on the private app this repo is modeled on.
 - **WebKit reports a native `<select>` as a CSP violation** under a strict Content Security Policy.
 - **CloudFront's flat-rate Free plan changes distribution settings when you subscribe.** Your infrastructure code has to match, or the next deploy fails.
 
-## Repo layout *(coming)*
+## Repo layout
 
 ```
 design/
   decisions.md      numbered, platform-neutral decisions
   modules/          one spec per feature
+platform/           this branch's platform choices and one-time setup
 tests/contract/     HTTP-level tests both branches must pass
+tests/gate/         accessibility and layout checks (Playwright + axe-core)
 .github/workflows/  the deploy pipeline (differs per branch)
 ```
 
-On `lamp`: `public/` (PHP pages), `migrations/` (SQL).
-On `aws`: `cmd/`, `internal/` (Go modules), `infra/` (CDK and its cost tests).
+On `lamp`: `public/` (the web root), `src/` and `templates/` (PHP), `migrations/` (SQL), `bin/` (migrations and a local server).
+On `aws` *(coming)*: `cmd/`, `internal/` (Go modules), `infra/` (CDK and its cost tests).
 
-## Running it *(coming)*
+## Running it
+
+See [platform/README.md](platform/README.md) for running the site and its tests locally, and for the one-time setup to deploy your own copy.
 
 ## Built with
 

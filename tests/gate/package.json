@@ -1,0 +1,13 @@
+{
+  "name": "php2go-gate",
+  "private": true,
+  "type": "module",
+  "description": "Accessibility and layout checks that must pass before any deploy (D-018).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.1",
+    "@playwright/test": "1.48.2"
+  }
+}

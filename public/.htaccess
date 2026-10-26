@@ -1,0 +1,37 @@
+# Apache settings for the web root. Only public/ is deployed here; the code, templates,
+# migrations and config.local.json live in a private folder outside it.
+
+Options -Indexes
+
+# Written by the deploy to point at the code. Running it prints nothing, but there's no reason to allow it.
+<Files "code-path.php">
+    Require all denied
+</Files>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # HTTPS only (design/modules/site.md). Some hosts end TLS in front of Apache
+    # and say so with X-Forwarded-Proto.
+    # Certificate checks under /.well-known/ are answered over plain HTTP too.
+    RewriteCond %{REQUEST_URI} !^/\.well-known/
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+    # Dotfiles are never served, except /.well-known/, which the host's HTTPS certificate renewal uses.
+    RewriteRule (^|/)\.(?!well-known/) - [F]
+
+    # Everything that isn't a file goes to the front controller.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# The stylesheet gets the same protective headers as the pages, which PHP sends itself.
+<IfModule mod_headers.c>
+    <FilesMatch "\.css$">
+        Header set X-Content-Type-Options "nosniff"
+        Header set Strict-Transport-Security "max-age=31536000"
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>

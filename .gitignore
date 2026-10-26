@@ -1,0 +1,6 @@
+config.local.json
+build/
+node_modules/
+test-results/
+playwright-report/
+server*.log

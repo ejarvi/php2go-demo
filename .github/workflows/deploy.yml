@@ -1,0 +1,300 @@
+# The pipeline from design/delivery.md: test → gate → deploy → smoke test → tag (D-017).
+# Where the site runs comes from the "lamp" GitHub environment, never from the repo (D-024).
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time, in push order, and a running deploy is never cancelled (D-013).
+concurrency:
+  group: deploy-lamp
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and gate
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: club
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_NAME: club
+      DB_USER: root
+      DB_PASSWORD: ci-root-password
+      SESSION_SECRET: ci-session-secret
+      ORGANIZER_PASSWORD: contract-test-password
+      CLUB_NAME: Riverside Community Club
+      CLUB_TIMEZONE: America/Chicago
+      # Tests submit forms instantly, so the bot timer is off here (D-011).
+      FORM_MIN_SECONDS: '0'
+      PHP_CLI_SERVER_WORKERS: '4'
+      # A release ID shaped like a real one, so the release tests compare something real.
+      RELEASE: r${{ github.run_number }}+ci
+      BASE_URL: http://127.0.0.1:8080
+      ALT_BASE_URL: http://127.0.0.1:8081
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check PHP syntax
+        run: find public src bin templates platform -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Start the site on empty storage
+        run: |
+          wait_for() {
+            for _ in $(seq 1 30); do
+              curl -fsS "$1/health" && return 0
+              sleep 1
+            done
+            echo "::error::The site at $1 didn't start"
+            return 1
+          }
+          sh bin/serve-local.sh 8080 > server.log 2>&1 &
+          wait_for "$BASE_URL"
+          # A second copy on the same storage with another password, for the password-change test.
+          ORGANIZER_PASSWORD=a-changed-password sh bin/serve-local.sh 8081 > server-alt.log 2>&1 &
+          wait_for "$ALT_BASE_URL"
+
+      - name: Acceptance tests
+        run: node --test --test-concurrency=1 'tests/contract/*.test.mjs'
+
+      - name: Install the gate's browsers
+        working-directory: tests/gate
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium firefox webkit
+
+      - name: Accessibility and layout gate
+        working-directory: tests/gate
+        run: npx playwright test
+
+      - name: Show the server logs
+        if: failure()
+        run: cat server.log server-alt.log
+
+  # Three SSH keys, each confined on the host to one job (D-015, platform/README.md):
+  # the web key can only rsync into the web root, the app key only into the private app
+  # folder, and the migrate key can only run migrate-gate.php.
+  deploy:
+    name: Deploy to lamp
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: lamp
+      url: ${{ vars.SITE_URL }}
+    permissions:
+      contents: write
+    env:
+      # Settings that aren't credentials are environment variables; credentials are secrets.
+      SSH_HOST: ${{ vars.SSH_HOST }}
+      SSH_PORT: ${{ vars.SSH_PORT }}
+      SSH_USER: ${{ vars.SSH_USER }}
+      SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+      APP_DIR: ${{ vars.APP_DIR }}
+      SITE_URL: ${{ vars.SITE_URL }}
+      CLUB_NAME: ${{ vars.CLUB_NAME }}
+      CLUB_TIMEZONE: ${{ vars.CLUB_TIMEZONE }}
+      DB_HOST: ${{ vars.DB_HOST }}
+      DB_PORT: ${{ vars.DB_PORT }}
+      DB_NAME: ${{ vars.DB_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Release ID and mode
+        run: |
+          echo "RELEASE=r${GITHUB_RUN_NUMBER}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "REMOTE=${SSH_USER}@${SSH_HOST}" >> "$GITHUB_ENV"
+          # A dry run checks the keys and lists what would change, but changes nothing.
+          if [ -f .github/dry-run ]; then
+            echo "DRY_RUN=1" >> "$GITHUB_ENV"
+            echo "::notice::Dry run: .github/dry-run is present, so nothing on the host will change."
+          else
+            echo "DRY_RUN=0" >> "$GITHUB_ENV"
+          fi
+
+      - name: Check the lamp environment's settings
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ORGANIZER_PASSWORD: ${{ secrets.ORGANIZER_PASSWORD }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          SSH_WEB_KEY: ${{ secrets.SSH_WEB_KEY }}
+          SSH_APP_KEY: ${{ secrets.SSH_APP_KEY }}
+          SSH_MIGRATE_KEY: ${{ secrets.SSH_MIGRATE_KEY }}
+        run: |
+          missing=0
+          for name in SSH_HOST SSH_USER SSH_KNOWN_HOSTS APP_DIR SITE_URL CLUB_NAME CLUB_TIMEZONE DB_HOST DB_NAME \
+                      DB_USER DB_PASSWORD ORGANIZER_PASSWORD SESSION_SECRET SSH_WEB_KEY SSH_APP_KEY SSH_MIGRATE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::The lamp environment is missing $name. See platform/README.md."
+              missing=1
+            fi
+          done
+          if [ -n "$APP_DIR" ] && ! [[ "$APP_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::APP_DIR must be an absolute path, such as /home/<user>/private/php2go."
+            missing=1
+          fi
+          exit $missing
+
+      - name: Build the release
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ORGANIZER_PASSWORD: ${{ secrets.ORGANIZER_PASSWORD }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+        run: |
+          # The app folder gets this release's code, the migrate gate and the settings file.
+          mkdir -p "build/app/releases/$RELEASE" build/web
+          cp -R src templates migrations bin "build/app/releases/$RELEASE/"
+          printf '%s\n' "$RELEASE" > "build/app/releases/$RELEASE/RELEASE"
+          cp platform/migrate-gate.php build/app/
+          # Readable by the site's own account only. rsync keeps these permissions for a new file.
+          (umask 077 && jq -n \
+            --arg DB_HOST "$DB_HOST" --arg DB_PORT "${DB_PORT:-3306}" --arg DB_NAME "$DB_NAME" \
+            --arg DB_USER "$DB_USER" --arg DB_PASSWORD "$DB_PASSWORD" \
+            --arg ORGANIZER_PASSWORD "$ORGANIZER_PASSWORD" --arg SESSION_SECRET "$SESSION_SECRET" \
+            --arg CLUB_NAME "$CLUB_NAME" --arg CLUB_TIMEZONE "$CLUB_TIMEZONE" \
+            '$ARGS.named' > build/app/config.local.json)
+          # The web root gets public/, plus a pointer to this release's code.
+          # Uploading that pointer is what switches the site to the new release.
+          cp -R public/. build/web/
+          printf "<?php\n// Written by the deploy. Never committed.\nreturn '%s';\n" "${APP_DIR%/}/releases/$RELEASE" > build/web/code-path.php
+
+      - name: Set up SSH
+        env:
+          SSH_WEB_KEY: ${{ secrets.SSH_WEB_KEY }}
+          SSH_APP_KEY: ${{ secrets.SSH_APP_KEY }}
+          SSH_MIGRATE_KEY: ${{ secrets.SSH_MIGRATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          # Values pasted on Windows can contain CR characters, which OpenSSH rejects.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
+          opts="-p ${SSH_PORT:-22} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          for key in web app migrate; do
+            var="SSH_${key^^}_KEY"
+            printf '%s\n' "${!var}" | tr -d '\r' > "$HOME/.ssh/$key"
+            chmod 600 "$HOME/.ssh/$key"
+            # Some hosts slow down new SSH connections that arrive in quick succession, so each
+            # key opens one connection now and every later command reuses it. The key's
+            # restrictions on the host still apply to everything sent over it.
+            ssh -i "$HOME/.ssh/$key" $opts -o ControlMaster=yes -o ControlPersist=15m \
+              -o "ControlPath=$HOME/.ssh/cm-$key" -fN "$REMOTE" \
+              || { echo "::error::Couldn't connect with the $key key. Check $var, SSH_HOST, SSH_USER and SSH_KNOWN_HOSTS."; exit 1; }
+            echo "SSH_${key^^}=ssh -i $HOME/.ssh/$key $opts -o ControlMaster=no -o ControlPath=$HOME/.ssh/cm-$key" >> "$GITHUB_ENV"
+          done
+
+      # rrsync confines the web and app keys to one folder each, so "/" below means that
+      # folder. If a key weren't confined, "/" would be the host's root, the marker
+      # wouldn't be found there, and nothing would be synced.
+      - name: "Safety: the web and app keys reach only their own folders"
+        run: |
+          check() {
+            if ! rsync --list-only -e "$1" "$REMOTE:/$2" > /dev/null; then
+              echo "::error::The marker /$2 isn't in this key's folder. See platform/README.md."
+              exit 1
+            fi
+            if $1 "$REMOTE" ls > /dev/null 2>&1 < /dev/null; then
+              echo "::error::A deploy key ran a shell command, so it isn't confined. Stopping."
+              exit 1
+            fi
+            if rsync --list-only -e "$1" "$REMOTE:../" > /dev/null 2>&1; then
+              echo "::error::A deploy key can read outside its folder. Stopping."
+              exit 1
+            fi
+          }
+          check "$SSH_WEB" .deploy-target
+          check "$SSH_APP" .app-target
+          echo "The web and app keys are confined."
+
+      # The host may not let the deploy change folder times or permissions, so rsync leaves both alone.
+      - name: 1. Upload the release's code and settings
+        run: |
+          opts=(-rltzi --omit-dir-times)
+          if [ "$DRY_RUN" = 1 ]; then opts+=(--dry-run); fi
+          rsync "${opts[@]}" -e "$SSH_APP" build/app/ "$REMOTE:/"
+
+      # Checked only now, because the first deploy is what uploads migrate-gate.php.
+      - name: 2. Apply storage changes, before the new code goes live
+        if: env.DRY_RUN == '0'
+        run: |
+          rc=0
+          out=$($SSH_MIGRATE "$REMOTE" ls 2>&1 < /dev/null) || rc=$?
+          if [ "$rc" = 0 ] || ! grep -q 'migrate-gate: expected' <<< "$out"; then
+            echo "::error::The migrate key isn't confined to migrate-gate.php. Stopping. It said: $out"
+            exit 1
+          fi
+          $SSH_MIGRATE "$REMOTE" "apply $RELEASE" < /dev/null
+
+      - name: 3. Update the web root, which switches the site to the new release
+        run: |
+          # --delete removes files deleted from public/, but keeps the marker and what the host manages.
+          opts=(-rltzi --omit-dir-times --delete --max-delete=100
+                --filter='P /.deploy-target' --filter='P /.well-known/' --filter='P /cgi-bin/')
+          if [ "$DRY_RUN" = 1 ]; then opts+=(--dry-run); fi
+          rsync "${opts[@]}" -e "$SSH_WEB" build/web/ "$REMOTE:/"
+
+      - name: Smoke test
+        if: env.DRY_RUN == '0'
+        run: |
+          url="${SITE_URL%/}/health"
+          body=""
+          # About a minute, in case the host's PHP caches files for a little while after they change.
+          for _ in $(seq 1 20); do
+            body=$(curl -fsS "$url" || true)
+            if jq -e --arg release "$RELEASE" '.status == "ok" and .release == $release' <<< "$body" > /dev/null 2>&1; then
+              echo "The live site is running $RELEASE"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::$url didn't report release $RELEASE. Last answer: $body"
+          exit 1
+
+      - name: Tag the release
+        if: env.DRY_RUN == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE" > /dev/null 2>&1; then
+            echo "$RELEASE already exists, from an earlier attempt at this deploy."
+            exit 0
+          fi
+          gh release create "$RELEASE" --target "$GITHUB_SHA" --title "$RELEASE" --generate-notes
+
+      - name: Close connections and remove the keys
+        if: always()
+        run: |
+          for key in web app migrate; do
+            if [ -S "$HOME/.ssh/cm-$key" ]; then
+              ssh -o "ControlPath=$HOME/.ssh/cm-$key" -O exit "$REMOTE" 2> /dev/null || true
+            fi
+          done
+          rm -f "$HOME/.ssh/web" "$HOME/.ssh/app" "$HOME/.ssh/migrate" build/app/config.local.json
