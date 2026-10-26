@@ -59,6 +59,7 @@ Don't trigger a deploy live: a CDK deploy takes longer than the whole slot. Show
 ### If asked
 
 - **"What does the cost gate catch?"** A NAT gateway is the classic example, at about $32 a month while idle. Moving MySQL to RDS would put the database in a VPC. A Lambda in a VPC needs a NAT gateway to reach SSM and other AWS APIs, and CDK's default VPC creates one in each availability zone. DynamoDB keeps the site out of a VPC, and the CI test makes sure no NAT gateway sneaks back in.
+- **"Were you hit by the Brotli bug?"** Not in anything that ships. `go.sum` has no Brotli module, the repo vendors no decoder, and the Go code never decodes compressed input. CloudFront compresses responses on AWS's side. Only CI touches it, through Node.js, which installs the newest patch release on every run. Checking took one search, which is the point of keeping the dependency list short (takeaway 7).
 
 ## What another builder can take away
 
@@ -84,6 +85,13 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 **5. On a cloud account, cost and security can pull against each other.** AWS's new Free plan, the one that can never charge your card, blocked creating the GitHub OIDC provider. Keyless deploys required upgrading to the Paid plan, which can't be undone. I chose security, and replaced the Free plan's spending guarantee with budgets, anomaly detection and the CI cost gate.
 
 **6. Keep the pipeline and change everything under it.** Moving from SSH to cloud deploys didn't mean leaving GitHub Actions. The gates carried over: tests, accessibility checks with Playwright + axe, deploy, smoke test, release tag.
+
+**7. A short, visible dependency list makes "are we affected?" a one-minute question.** About a week after PHP2Shell, a vulnerability in the widely bundled Brotli decompression library came out. The advice was to search vendored code, container images, `node_modules`, Python packages and gems for bundled copies, upgrade everything that has a fix, and rebuild anything that bundles one. For the Go version, the check was one search:
+- **Shipped code:** no Brotli module in `go.sum`, no vendored decoder in the repo, and nothing in the code reads `Content-Encoding`. Go's standard library has no Brotli decoder.
+- **The edge:** CloudFront compresses responses itself, inside AWS's own infrastructure.
+- **CI only:** Node.js, which bundles Brotli, runs the tests and the CDK CLI, and installs the newest patch release on every run. It only fetches from trusted sources.
+
+On the PHP version, the same question means asking the host about Apache and its modules, and waiting. Regeneration doesn't make you immune to the next bug, but a stack whose whole dependency list fits on one screen lets you answer quickly, on your own schedule.
 
 **Bugs from the original port that no spec predicted, which carry over to other projects:**
 - `Referrer-Policy: no-referrer` makes browsers send `Origin: null`, so the CSRF check refused every sign-in.
