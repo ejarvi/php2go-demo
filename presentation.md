@@ -18,6 +18,8 @@ The talk rests on three points:
 
 The honest caveat: the new stack has a supply chain too (Go modules, AWS). The claim isn't "no dependencies". It's a shorter list you can see and control, plus the option to move again.
 
+The same approach applies beyond small sites. With more investment in design, constraints, requirements and tests, an enterprise team can prepare its components to be regenerated and redeployed on other dependencies, which makes its software supply chain more secure and resilient (takeaway 8).
+
 ## Background: PHP2Shell
 
 - **What it is:** CVE-2026-109618 and CVE-2026-109619, a critical remote code execution bug in PHP 5.4 through 8.5, patched on 2026-10-21.
@@ -95,6 +97,13 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 - **CI only:** Node.js, which bundles Brotli, runs the tests and the CDK CLI, and installs the newest patch release on every run. It only fetches from trusted sources.
 
 On the PHP version, the same question means asking the host about Apache and its modules, and waiting. Regeneration doesn't make you immune to the next bug, but a stack whose whole dependency list fits on one screen lets you answer quickly, on your own schedule.
+
+**8. The same idea scales to enterprise systems, if the investment moves to design and tests.** A small site can be regenerated whole. A larger system can't, but its components can, one at a time, if each one's behavior is pinned down well enough to rebuild it on different dependencies:
+- **Requirements and decisions** written without naming a platform, so they survive a change of language, framework or host.
+- **Constraints made explicit:** security headers, data retention, cost ceilings and accessibility, each checked automatically rather than remembered.
+- **Contract tests at the component's boundary,** so a rebuilt component is done when it passes them, whatever it's built on.
+
+That makes regeneration a form of preparedness for software supply chain risk. When a runtime, library or vendor becomes a liability, whether it's vulnerable, abandoned, slow to patch or untrusted, a team that has invested in its specs and tests has a credible exit: regenerate and redeploy the component on other dependencies, instead of waiting on the one that failed. The patching process doesn't go away, but it stops being the only option. The work shifts from writing code to keeping decisions, constraints and tests current, and that is what coding agents make worth doing now.
 
 **Bugs from the original port that no spec predicted, which carry over to other projects:**
 - `Referrer-Policy: no-referrer` makes browsers send `Origin: null`, so the CSRF check refused every sign-in.
