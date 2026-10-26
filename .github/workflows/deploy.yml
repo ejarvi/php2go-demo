@@ -212,6 +212,9 @@ jobs:
             var="SSH_${key^^}_KEY"
             printf '%s\n' "${!var}" | tr -d '\r' > "$HOME/.ssh/$key"
             chmod 600 "$HOME/.ssh/$key"
+            # The public fingerprint, to compare with `ssh-keygen -lf ~/.ssh/authorized_keys` on the host.
+            ssh-keygen -lf "$HOME/.ssh/$key" \
+              || { echo "::error::$var isn't a private key. Paste the whole private key file, not the .pub one."; exit 1; }
             # Some hosts slow down new SSH connections that arrive in quick succession, so each
             # key opens one connection now and every later command reuses it. The key's
             # restrictions on the host still apply to everything sent over it.
