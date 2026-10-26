@@ -106,7 +106,12 @@ AWS changes its sign-up often. Check https://aws.amazon.com/free on the day.
 
 ### Part B. A new project for this site
 
-1. **Create a project** for the demo in the AWS console (for example, named `php2go`), in your usual region. A project is its own AWS account inside your organization, so this site's resources, its OIDC provider and its bill stay separate. Its billing still rolls up to the organization's.
+1. **Create a project** in **AWS Settings**, signed in with your Builder ID ([AWS's guide](https://docs.aws.amazon.com/accounts/latest/reference/create-project.html)):
+   - Open https://settings.aws.com, or choose **Manage projects** in the console.
+   - **Project → Create project.** Name it, for example, `php2go`: letters, digits and periods only.
+   - AWS assigns the region from your contact address: **US East (Ohio), `us-east-2`**, for a US address.
+   - A project is its own AWS account inside your organization, so this site's resources, its OIDC provider and its bill stay separate. Its billing still rolls up to the organization's.
+   - **Don't create it as the root user under AWS Organizations → Add an AWS account.** That makes a plain member account. It has no access for your Builder ID, isn't listed in your sessions, and can't be fixed with an Identity Center assignment.
 2. **Open the project's console.** Each project is its own account, opened through your Builder ID, not a root user:
    - In the account menu (top right), choose **Turn on multi-session support** if it's offered. It lets one browser keep up to five sessions open, such as the management account and this project.
    - Then choose **Add session**, sign in with your Builder ID, and pick the new project. Without multi-session support, sign out and sign back in, then pick the project.
