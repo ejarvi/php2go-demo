@@ -62,7 +62,7 @@ Every value here can be either a variable or a secret; when both exist, the secr
 | Name | Store as | Value |
 |---|---|---|
 | `AWS_ROLE_ARN` | secret | The deploy role's ARN, printed by step E3 |
-| `AWS_ACCOUNT_ID` | secret | The 12-digit account ID (step B2) |
+| `AWS_ACCOUNT_ID` | secret | The 12-digit account ID (step B1) |
 | `AWS_REGION` | variable | The region, such as `us-east-2` |
 | `ORIGIN_SECRET` | secret | 64 random hex characters (step F2). CloudFront sends it; the site refuses requests without it |
 | `ORGANIZER_PASSWORD` | secret | The organizers' shared password (D-023) |
@@ -76,7 +76,7 @@ Every value here can be either a variable or a secret; when both exist, the secr
 
 Steps marked 🔒 involve credentials: do them yourself, and never paste secret values into a chat or a file. Every value in angle brackets is your own and never belongs in the repository (D-024).
 
-**Already have an AWS organization on the Paid plan with advanced features on?** Skip Part A and start at **Part B**: a new project, its own GitHub OIDC provider and deploy role, and a new `aws` environment.
+**Already have an AWS organization on the Paid plan with advanced features on?** Skip Part A and start at **Part B**: a new member account, its own GitHub OIDC provider and deploy role, and a new `aws` environment.
 
 ### Part A. A new AWS account (skip if you have one)
 
