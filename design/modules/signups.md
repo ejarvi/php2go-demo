@@ -28,4 +28,4 @@ Let visitors sign up for an event, and show them it worked.
 3. Two sign-ups with the same email for the same event leave one sign-up, with the later head count.
 4. A sign-up with the trap field filled in looks successful but saves nothing.
 5. A sign-up to a draft, a past event or an unknown id is refused (404 for draft and unknown).
-6. A sign-up without the form's CSRF token is refused with 403 (D-019).
+6. A sign-up sent from another site is refused with 403, and nothing is saved (D-025).

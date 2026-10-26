@@ -19,4 +19,4 @@ How organizers sign in. Organizers share one password, set as a deploy secret (D
 3. With a session, `GET /admin` returns 200. After `POST /signout`, it redirects to `/signin`.
 4. A session started before the password changed is refused.
 5. The session cookie is `Secure`, `HttpOnly` and `SameSite=Lax`.
-6. Sign-in works when the browser sends a same-origin `Referer` and `Origin` (D-019).
+6. Sign-in works when the browser sends a same-origin `Referer`, `Origin` and `Sec-Fetch-Site` (D-019, D-025).

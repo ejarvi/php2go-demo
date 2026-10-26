@@ -28,7 +28,7 @@ Revert the commit and push. There's no separate rollback button.
   - **Environment secrets** for the secret ones.
 - **Fail early:** the workflow reads these by name and stops with a clear error if one is missing.
 - **Clones and forks:** anyone can deploy their own copy by creating the same environment with their own values.
-- **Docs use placeholders.** Setup checklists name the variables, never their values: `DEPLOY_HOST`, not a real server name.
+- **Docs use placeholders.** Setup checklists name the variables, never their values: `SSH_HOST`, not a real server name.
 - **The live address** is printed in the deploy log and set as the environment's URL in GitHub, not committed.
 
 ## One-time setup (D-014)

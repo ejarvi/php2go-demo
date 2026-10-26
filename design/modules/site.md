@@ -18,9 +18,9 @@ What every page shares: layout, errors, headers, the health check and the releas
 - Frames aren't allowed (`frame-ancestors 'none'`).
 - `Strict-Transport-Security`. HTTPS only; HTTP redirects to HTTPS.
 
-## Forms
-- **Every POST carries a CSRF token** and is also checked against the `Origin` header.
-- A missing or wrong token gets 403 and a page that offers to return to the form and try again.
+## Forms (D-025)
+- **Only same-origin requests are accepted.** A POST that a browser marks as coming from another origin, including another subdomain, is refused. How that's checked is up to the implementation.
+- **A refused POST** gets 403 and a page that offers to return to the form and try again. Nothing is changed.
 
 ## Errors
 - **Unknown paths:** a 404 page in the site's layout.
@@ -32,3 +32,4 @@ What every page shares: layout, errors, headers, the health check and the releas
 3. `GET /no-such-page` returns 404 in the site's layout.
 4. The footer of `/` shows the same release ID as `/health`.
 5. No page loads a script or stylesheet from another site.
+6. A POST to `/signin` with the right password, sent with `Origin` and `Sec-Fetch-Site` showing another site, is refused with 403 and starts no session. The same POST sent the way a browser sends it from another subdomain is refused too (D-025).

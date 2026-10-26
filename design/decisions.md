@@ -93,7 +93,7 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Why: checks that run on every deploy catch what a reviewer would miss on the fifth change.
 
 ## D-019 — Strict headers, and CSRF protection on every form
-- Date: 2026-10-25 · Status: Accepted
+- Date: 2026-10-25 · Status: Accepted; how forms are protected is superseded by D-025
 - Decision: Every page sends the headers in [modules/site.md](modules/site.md): a strict Content Security Policy, `Referrer-Policy: same-origin`, and so on. Every POST checks a CSRF token and the `Origin` header.
 - Why: these block whole classes of attack for free. The referrer policy is `same-origin`, not `no-referrer`, because with `no-referrer` some browsers send `Origin: null` and the origin check would refuse every legitimate form.
 
@@ -121,3 +121,8 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Date: 2026-10-25 · Status: Accepted
 - Decision: No host names, server paths, site addresses, account numbers or regions appear anywhere in the repository. Each branch's deploy job reads them from its GitHub environment: variables for settings, secrets for secrets. It fails with a clear message if one is missing. Docs and checklists name the variables but use placeholders for their values. See [delivery.md](delivery.md).
 - Why: the repository is public, and the author's own hosting is not part of the demo. It also means anyone can deploy their own copy by filling in their own environment, with no code changes.
+
+## D-025 — Forms accept only same-origin requests
+- Date: 2026-10-25 · Status: Accepted (supersedes how D-019 protects forms)
+- Decision: Every POST that a browser marks as coming from another origin is refused with 403, and changes nothing. That includes other sites and other subdomains of the same site. Requests from this site's own pages always work. How it's enforced is up to each implementation: CSRF tokens, the `Origin` header, the `Sec-Fetch-Site` header, or the platform's built-in protection. Each records its choice in its `platform/` folder.
+- Why: the rule is what protects organizers and visitors, and it can be tested over HTTP (D-003). The mechanisms differ by platform. Some have this built in, and some don't need tokens or sessions to do it. Fixing the outcome instead of the mechanism lets each implementation use what its platform does best.
