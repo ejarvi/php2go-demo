@@ -2,7 +2,7 @@
 
 **PHP2Go: After PHP2Shell, Regenerating a PHP Site in Go on AWS with Claude, for $0.14**
 
-A 5-minute live demo for AI Tinkerers. There are no slides: everything is shown in the editor, the terminal, GitHub Actions and the AWS console. The demo repo is this one; see the [README](README.md).
+A 5-minute live demo for AI Tinkerers. There are no slides: everything is shown in the browser, the editor, the terminal, GitHub and the AWS console. The demo repo is this one; see the [README](README.md).
 
 I also used Claude to help develop this presentation, including these notes.
 
@@ -29,14 +29,36 @@ AI is changing the economics of security on both sides. On the attack side, find
 
 ## What I'll show
 
+The demo is a before and after: it opens on the PHP site, walks through the move in GitHub, and ends with both sites running side by side and the AWS bill.
+
 | Time | On screen | Point |
 |------|-----------|-------|
-| 0:00–0:30 | The `lamp` site running | PHP2Shell, and the decision to leave PHP instead of waiting for the next patch. |
-| 0:30–1:30 | `design/decisions.md` → a module spec → Claude regenerates the module on `aws` → contract tests pass | What I maintain is the specs. None of them mention PHP or Go. |
-| 1:30–2:30 | **Security:** what each branch depends on for patches, then the two deploy jobs side by side | `lamp` depends on PHP, Apache, Linux and the host. `aws` depends on one binary and a short `go.mod`. SSH key → OIDC. |
-| 2:30–3:30 | **Cost:** the AWS bill, then the CI cost test | Hosting costs $0.00. A NAT gateway would cost $32 a month, so CI refuses to deploy one. |
-| 3:30–4:30 | **Same pipeline:** a GitHub Actions run on each branch | Same platform, same gates, new target. |
+| 0:00–0:30 | **Before:** the `lamp` site running in the browser | PHP2Shell, and the decision to leave PHP instead of waiting for the next patch. |
+| 0:30–1:15 | `design/decisions.md` → a module spec → the finished Claude session that regenerated it on `aws` → contract tests pass | What I maintain is the specs. None of them mention PHP or Go. |
+| 1:15–2:00 | **The move, in GitHub:** the branches page, then Settings → Environments | The PHP code is archived on the `lamp` branch, and its `lamp` environment still holds its SSH deploy secrets. The default branch is now `aws`, and the new `aws` environment holds no secrets, only a role ARN. `lamp` depends on PHP, Apache, Linux and the host for patches; `aws` depends on one binary and a short `go.mod`. |
+| 2:00–2:45 | **The pipeline:** the `aws` workflow file, then a green run in GitHub Actions: tests → accessibility gate → cost gate → OIDC → `cdk deploy` → smoke test → release tag | Same platform and same gates as `lamp`, new target. The SSH key became a short-lived OIDC role. |
+| 2:45–3:45 | **After:** both sites side by side in the browser, the same sign-up submitted on each | Same site, same contract tests, new stack. *Pause here for the audience.* |
+| 3:45–4:30 | **Cost:** the AWS Billing and Cost Management console showing $0.14 | Hosting costs $0.00. The whole $0.14 is Bedrock playground queries, paid from free credits, and they completed an AWS credit challenge that paid out $20 in more credit. Net, the account is ahead. |
 | 4:30–5:00 | — | Write your decisions down, and the next PHP2Shell is a rebuild, not an emergency. |
+
+### Tabs to have open, in order
+
+Five minutes leaves no time to navigate, so open these beforehand and flip left to right:
+
+1. **Browser:** the `lamp` site.
+2. **Editor:** `design/decisions.md` and one module spec; a terminal with the contract tests already passing on `aws`.
+3. **GitHub:** the repo's branches page, showing `aws` as the default branch and `lamp` kept for archival.
+4. **GitHub:** Settings → Environments, with `lamp` and `aws` listed. Open `aws` to show that it has no secrets.
+5. **GitHub:** the `aws` deploy workflow file, ideally split beside the `lamp` one.
+6. **GitHub Actions:** the latest green `aws` run, with the job graph expanded.
+7. **Browser:** the `lamp` and `aws` sites in side-by-side windows.
+8. **AWS console:** Billing and Cost Management, showing month-to-date and total spend.
+
+Don't trigger a deploy live: a CDK deploy takes longer than the whole slot. Show a completed run, and keep screenshots of each tab in case the conference Wi-Fi or a sign-in fails.
+
+### If asked
+
+- **"What does the cost gate catch?"** A NAT gateway is the classic example, at about $32 a month while idle. Moving MySQL to RDS would put the database in a VPC. A Lambda in a VPC needs a NAT gateway to reach SSM and other AWS APIs, and CDK's default VPC creates one in each availability zone. DynamoDB keeps the site out of a VPC, and the CI test makes sure no NAT gateway sneaks back in.
 
 ## What another builder can take away
 
@@ -57,7 +79,7 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 - Price every AWS resource before writing any infrastructure code.
 - Turn the expensive ones into a test that fails CI: NAT gateway ~$32/month, load balancer $15–30, a Secrets Manager secret $0.40 each.
 - Sign-in, a database, a CDN and WAF all fit inside the always-free allowances.
-- My whole AWS bill so far is **$0.14**, for Bedrock playground queries during an AWS credit challenge. Free credits paid for it, and the challenge paid $20 back.
+- My whole AWS bill so far is **$0.14**, for Bedrock playground queries during an AWS credit challenge. Free credits paid for it, and the challenge paid out $20 in more credit.
 
 **5. On a cloud account, cost and security can pull against each other.** AWS's new Free plan, the one that can never charge your card, blocked creating the GitHub OIDC provider. Keyless deploys required upgrading to the Paid plan, which can't be undone. I chose security, and replaced the Free plan's spending guarantee with budgets, anomaly detection and the CI cost gate.
 
@@ -65,8 +87,14 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 
 **Bugs from the original port that no spec predicted, which carry over to other projects:**
 - `Referrer-Policy: no-referrer` makes browsers send `Origin: null`, so the CSRF check refused every sign-in.
+  - **Why it was new:** the PHP version used session tokens for CSRF protection and never read the `Origin` header. The Go version runs on Lambda without server-side sessions, so it checks that a form's `Origin` matches the site instead. The new stack also sent strict security headers, including `no-referrer`. Under that policy, browsers hide the origin of cross-site and same-site form posts alike and send `Origin: null`, so every sign-in looked like a forgery.
+  - **The fix:** loosen the policy to `strict-origin-when-cross-origin`, which still keeps full URLs from leaking to other sites but lets the browser send the real `Origin`.
 - Warm Lambdas keep secrets they read at cold start.
+  - **Why it was new:** PHP starts fresh on every request and rereads its config each time, so a changed password or key takes effect right away. A Go binary on Lambda keeps running between requests, and it reads its secrets from SSM once, at startup, to keep requests fast and cheap. After a secret changed, warm instances kept using the old value, and only new instances picked up the new one.
+  - **The fix:** treat a secret change as a deploy. Redeploying the function replaces every warm instance, so they all start again with the new value.
 - WebKit reports a native `<select>` as a CSP violation under a strict policy.
+  - **Why it was new:** the PHP site on shared hosting had no Content Security Policy. The Go version sends a strict one, and the Playwright gate fails on any CSP violation in any browser. Safari's engine, WebKit, styles its built-in dropdown in a way that a strict `style-src` reports as a violation, even though the page's own code does nothing wrong.
+  - **The fix:** have the test ignore that one known WebKit report, rather than loosening the policy for every browser.
 
 **Four things to apply even if you never use this code:**
 1. Maintain specs and decisions, not just code, so a platform move is a rebuild rather than a rewrite.
@@ -118,6 +146,15 @@ Go still has supply-chain risk, but it's *visible*: `go.mod` and `go.sum` pin ev
 - **CrowdStrike**, "PHP2Shell: Obstacles to Weaponizing Likely Constrain Immediate Exploitation": https://www.crowdstrike.com/en-us/blog/obstacles-to-weaponizing-php2shell-likely-constrain-exploitation/
 - **The Hacker News**, "PHP2Shell Exploit Attempts Hit Millions as Attackers Try to Deploy Mirai Malware": https://thehackernews.com/2026/10/php2shell-exploit-attempts-hit-millions.html
 - **BankInfoSecurity**, "Waiting for the PHP2Shell Onslaught as PoCs Proliferate": https://www.bankinfosecurity.com/waiting-for-php2shell-onslaught-as-pocs-proliferate-a-33190
+
+**Accessibility and browser testing with Playwright and axe**
+- **Playwright**, getting started: https://playwright.dev/docs/intro
+  - Drives Chromium, Firefox and WebKit (Safari's engine) from one test suite.
+- **Playwright, "Accessibility testing"**, the guide to running axe inside Playwright tests: https://playwright.dev/docs/accessibility-testing
+- **axe-core**, Deque's open-source accessibility rules engine: https://github.com/dequelabs/axe-core
+- **`@axe-core/playwright`**, the package that connects the two: https://www.npmjs.com/package/@axe-core/playwright
+- **Deque University, axe rule descriptions**, explaining each violation axe reports and how to fix it: https://dequeuniversity.com/rules/axe/
+- **W3C, "How to Meet WCAG"**, the accessibility guidelines axe checks against: https://www.w3.org/WAI/WCAG22/quickref/
 
 **About the format**
 - AI Tinkerers, "What makes a great demo": https://aitinkerers.org/p/what-makes-a-great-demo-at-ai-tinkerers
