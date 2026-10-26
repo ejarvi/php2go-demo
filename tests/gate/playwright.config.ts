@@ -15,6 +15,8 @@ const sizes = {
 export default defineConfig({
   testDir: '.',
   timeout: 60_000,
+  // A hang fails the gate in minutes, not when the job's own limit runs out.
+  globalTimeout: 10 * 60_000,
   reporter: 'list',
   forbidOnly: true,
   use: {

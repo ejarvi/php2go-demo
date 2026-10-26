@@ -112,6 +112,7 @@ jobs:
 
       - name: Accessibility and layout gate
         working-directory: tests/gate
+        timeout-minutes: 12
         run: npx playwright test
 
       - name: Show the server logs
