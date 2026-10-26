@@ -57,7 +57,7 @@ A leaked key can't open a shell, read other folders or run anything else (D-015)
 3. **The web key** mirrors `public/` into the web root, including `code-path.php`, which points at the new release's code. That's the moment the site switches over.
 4. **The smoke test** checks that `/health` reports the new release, and the commit is tagged with it.
 
-**Tests and gate (D-026):** off by default, so a deploy takes seconds. To run them first, tick **Run the tests and the accessibility gate** under Actions → Deploy → **Run workflow**. To run them on every push, add a repository variable `RUN_TESTS` set to `true` (Settings → Secrets and variables → Actions → Variables). If they run and fail, nothing is deployed.
+**Tests and gate (D-027):** they run before every deploy, which adds a few minutes. If they fail, nothing is deployed. To skip them for one run, untick **Run the tests and the accessibility gate** under Actions → Deploy → **Run workflow**. To skip them on every push, for example while fixing the deploy itself, add a repository variable `RUN_TESTS` set to `false` (Settings → Secrets and variables → Actions → Variables).
 
 **Dry run:** if the file `.github/dry-run` is in the commit, the deploy checks the settings and keys and lists what each sync *would* change, but changes nothing on the host.
 

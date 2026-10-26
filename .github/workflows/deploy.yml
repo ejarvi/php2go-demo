@@ -1,6 +1,6 @@
 # The pipeline from design/delivery.md: test → gate → deploy → smoke test → tag (D-017).
 # Where the site runs comes from the "lamp" GitHub environment, never from the repo (D-024).
-# The tests and gate are off unless switched on, so a deploy takes seconds (D-026).
+# The tests and gate run before every deploy unless switched off (D-026, D-027).
 name: Deploy
 
 on:
@@ -11,7 +11,7 @@ on:
       run_tests:
         description: Run the tests and the accessibility gate before deploying
         type: boolean
-        default: false
+        default: true
 
 # One deploy at a time, in push order, and a running deploy is never cancelled (D-013).
 concurrency:
@@ -22,11 +22,11 @@ permissions:
   contents: read
 
 jobs:
-  # On for one run with the Run workflow checkbox, or for every push with the
-  # repository variable RUN_TESTS set to true.
+  # On by default. Off for one run by unticking the Run workflow checkbox, or for every
+  # push with the repository variable RUN_TESTS set to false.
   test:
     name: Test and gate
-    if: inputs.run_tests || vars.RUN_TESTS == 'true'
+    if: (github.event_name == 'workflow_dispatch' && inputs.run_tests) || (github.event_name != 'workflow_dispatch' && vars.RUN_TESTS != 'false')
     runs-on: ubuntu-24.04
     services:
       mysql:

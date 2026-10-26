@@ -128,6 +128,11 @@ Format: **D-NNN — Title** · Date · Status (Proposed / Accepted / Superseded 
 - Why: the rule is what protects organizers and visitors, and it can be tested over HTTP (D-003). The mechanisms differ by platform. Some have this built in, and some don't need tokens or sessions to do it. Fixing the outcome instead of the mechanism lets each implementation use what its platform does best.
 
 ## D-026 — The tests and gate in the pipeline are switched on when wanted
-- Date: 2026-10-26 · Status: Accepted (changes D-017 and D-018)
+- Date: 2026-10-26 · Status: Superseded by D-027
 - Decision: A deploy skips the test and gate steps unless they're switched on, for one run or for every push. When they run and fail, nothing is deployed. The deploy, smoke test and tag always run.
 - Why: the tests and gate download a database, a language runtime and three browsers, which turns a deploy of seconds into several minutes. While the deploy itself is being set up, that wait comes with every attempt. They can be switched back on for every push once deploys are routine.
+
+## D-027 — The tests and gate run before every deploy, and can be switched off
+- Date: 2026-10-26 · Status: Accepted (supersedes D-026)
+- Decision: The test and gate steps run before every deploy, as D-017 and D-018 intend. They can be switched off for one run, or for every push, while the deploy itself is being worked on. When they run and fail, nothing is deployed.
+- Why: the deploy setup is done, so the few extra minutes buy the checks the design relies on. Switching them off stays possible, because a deploy fix shouldn't wait on browser downloads.

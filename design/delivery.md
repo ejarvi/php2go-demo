@@ -13,7 +13,7 @@ Every push to `main` runs one GitHub Actions workflow. Deploys run one at a time
 
 A failure at any step stops the steps after it. The live site keeps running the last good release.
 
-Steps 1 and 2 run only when switched on, for one run or for every push (D-026).
+Steps 1 and 2 can be switched off, for one run or for every push, while the deploy itself is being worked on (D-027).
 
 ## Rolling back (D-016)
 Revert the commit and push. There's no separate rollback button.
