@@ -34,7 +34,9 @@ What's left before the demo in [presentation.md](presentation.md) can run. As of
 - [x] The workflow: tests → gate → OIDC → secrets to SSM → `cdk diff`/`deploy` → smoke test → tag. It skips the deploy until `AWS_ROLE_ARN` exists.
 - [x] Followed `platform/README.md` from Part B: a member account, `aws login` with a role-switching profile, `cdk bootstrap`, `cdk deploy Php2goGitHub`, and the `aws` GitHub environment.
 - [x] First deploy to AWS on 2026-10-26 (r26), green from tests to tag. Deploy logs now mask the site's and the function's addresses.
-- [ ] **You:** add `SITE_URL`, subscribe the distribution to CloudFront's Free plan, and add `FREE_PLAN_WEB_ACL_ARN` before the next deploy (Part G).
+- [x] CloudFront on the flat-rate Free plan ($0/month), with its web ACL kept by `FREE_PLAN_WEB_ACL_ARN` (r36).
+- [ ] Re-enter the `SITE_URL` secret as exactly the CloudFront address and redeploy: a form post from an older browser (no `Sec-Fetch-Site`) is refused, so the trusted origin doesn't match yet.
+- [x] The gate runs in Microsoft's Playwright image, after GitHub's Ubuntu mirror stalled the browser install four times.
 - [ ] Confirm both sites are live side by side with the same sign-up working on each.
 - [ ] Check that the Billing console still shows $0.14 total and $0.00 for hosting.
 - [ ] Save or record the Claude session that regenerated the site, for the demo.
