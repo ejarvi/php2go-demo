@@ -41,7 +41,10 @@ test('4. the footer of / shows the same release ID as /health', async () => {
   const client = new Client();
   const { release } = JSON.parse((await client.get('/health')).text);
   const home = await client.get('/');
-  const footer = home.text.slice(home.text.indexOf('<footer'));
+  // Compared as the browser shows it: an implementation may write "+" as "&#43;".
+  const footer = home.text.slice(home.text.indexOf('<footer'))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)));
   assert.ok(footer.includes(release), `the footer shows ${release}`);
 });
 

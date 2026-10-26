@@ -1,253 +1,216 @@
-# Platform: LAMP on shared hosting
+# Platform: Go on AWS
 
-This branch's implementation of the design in [design/](../design/). The design doesn't name a platform (D-002); this folder records the choices this implementation makes, and the one-time setup it needs (D-014).
+This branch's implementation of the design in [design/](../design/). The design doesn't name a platform (D-002); this folder records the choices this implementation makes, and the one-time setup it needs (D-014). The PHP version it replaced is on the `lamp` branch.
 
 ## Choices
 
 | | |
 |---|---|
-| **Language** | PHP 8.1 or later, with no framework and no Composer packages |
-| **Storage** | MySQL 8, through PDO |
-| **Web server** | Apache, with `mod_rewrite` sending every request to `index.php` |
-| **Hosting** | Shared hosting with SSH access, where PHP runs as your own account (PHP-FPM or suEXEC, as on most control-panel hosts) |
-| **Deploy** | GitHub Actions → rsync over SSH, with three keys that can each do one job and nothing else |
-| **Secrets** | The GitHub environment `lamp`. The deploy writes them to `config.local.json` in a private folder outside the web root, readable only by your account |
-| **Same-origin forms (D-025)** | Every form carries a CSRF token signed from a random cookie, so it needs no session. A POST is also refused if the browser's `Sec-Fetch-Site` or `Origin` header shows it came from another origin |
-| **Clean-up** | Expired sign-ups, sessions and activity entries are deleted by occasional requests, since there's no scheduler to set up from the repository |
+| **Language** | Go, standard library first: `net/http`, `html/template`, `log/slog`, plus the AWS SDK and the Lambda adapter |
+| **Storage** | One DynamoDB table, provisioned 5 + 5 units, inside the always-free allowance |
+| **Hosting** | CloudFront (flat-rate Free plan) → a Lambda function URL (arm64, not in a VPC) |
+| **Infrastructure** | AWS CDK in Go, in `infra/`, with tests that fail on anything that costs money while idle (D-020) |
+| **Deploy** | GitHub Actions → GitHub OIDC (no stored keys) → `cdk deploy` |
+| **Secrets** | GitHub environment secrets, copied by each deploy into SSM Parameter Store (free standard parameters). The Lambda reads them at start-up |
+| **Same-origin forms (D-025)** | Go's built-in `http.CrossOriginProtection`, which reads the browser's `Sec-Fetch-Site` header (or compares `Origin`) and needs no tokens. CloudFront forwards both headers |
+| **Clean-up** | DynamoDB's TTL deletes expired sessions, sign-ups 30 days after their event, and activity after a year |
 
 ## Layout
 
 ```
-public/          the web root: index.php (the front controller), .htaccess, assets/
-src/             the code, one file per concern; handlers/ has one file per module
-templates/       the pages
-migrations/      storage changes, applied in name order by bin/migrate.php
-bin/             migrate.php, and serve-local.sh for tests
-platform/        this file, and migrate-gate.php for the host
-tests/contract/  the acceptance tests from design/modules/ (D-003), which every branch shares
+cmd/site/        the site: a local web server, or a Lambda behind CloudFront
+cmd/secrets/     copies the GitHub secrets into SSM during a deploy
+internal/site/   every page and form; one file per module, templates in templates/
+internal/store/  DynamoDB, plus an in-memory store for Go tests
+internal/platform/  settings, security headers, the CloudFront origin check, release ID
+web/static/      the stylesheet, built into the binary
+infra/           AWS CDK in Go: the GitHub sign-in stack, the site stack, and their tests
+tests/contract/  the acceptance tests from design/modules/ (D-003), shared with the lamp branch
 tests/gate/      the accessibility and layout checks (D-018)
 ```
 
-On the host, only `public/` goes in the web root. The code goes in a private folder outside it:
+## How it runs
 
 ```
-<web root>/                    the domain's document root: public/, plus code-path.php
-  .deploy-target               marker: proves to the deploy it has the right folder
-~/private/php2go/              APP_DIR: never served
-  .app-target                  marker
-  config.local.json            settings and secrets, written by every deploy
-  migrate-gate.php             the only thing the migrate key can run
-  releases/r12+abc1234/        each release's code; the newest five are kept
+Browser → https://dxxxxxxxxxxxx.cloudfront.net   (CloudFront Free plan: HTTPS, WAF, caches /assets/)
+            │  adds a secret header, so only CloudFront can reach the function
+            ▼
+          Lambda function URL → Go binary (arm64, 128 MB)
+            ├── DynamoDB table php2go-data
+            └── SSM Parameter Store /php2go/: organizer password, session secret
 ```
+
+The same binary runs locally (`go run ./cmd/site`) with an in-memory store, or with DynamoDB Local in CI.
 
 ## How a deploy works
 
-Each SSH key is limited on the host, in `~/.ssh/authorized_keys`, to one job:
+On every push to `main`:
+1. **Test and gate:** Go tests and the infrastructure tests (cost traps, the deploy role's limits, the Free plan's rules). Then the shared acceptance tests and the accessibility gate run against two copies of the site sharing DynamoDB Local (D-027 lets you switch these off).
+2. **Build** a Linux arm64 binary with the release ID built in (D-016).
+3. **Sign in to AWS** with GitHub OIDC, and check the account matches `AWS_ACCOUNT_ID`.
+4. **Copy the secrets** into SSM Parameter Store.
+5. **`cdk diff`, then `cdk deploy`** the `Php2go` stack.
+6. **Smoke test:** `/health` reports the new release, the headers are there, and the function URL refuses direct requests (403).
+7. **Tag** the commit with its release ID.
 
-| Key | Can only | How it's limited |
+Until the `aws` environment has `AWS_ROLE_ARN`, the deploy job skips itself with a notice and the run stays green. With `.github/dry-run` in the commit, only `cdk diff` runs.
+
+## The aws GitHub environment
+
+Every value here can be either a variable or a secret; when both exist, the secret wins. GitHub shows a secret's value as `***` in every log. A public repo's Actions logs are public too, so anything that identifies your account belongs in secrets.
+
+| Name | Store as | Value |
 |---|---|---|
-| **web** | rsync into the web root | `rrsync`, which confines rsync to one folder |
-| **app** | rsync into `APP_DIR` | `rrsync` |
-| **migrate** | run `migrate-gate.php`, which accepts one command: `apply <release>` | a forced `command=` |
-
-A leaked key can't open a shell, read other folders or run anything else (D-015). Before syncing, the deploy checks that each key really is confined, and stops if one isn't. Then:
-
-1. **The app key** uploads the new release's code to `APP_DIR/releases/<release>/`, along with `config.local.json` and `migrate-gate.php`. The live site doesn't use any of it yet.
-2. **The migrate key** applies the new release's storage changes. These work with both the old and the new code (design/delivery.md).
-3. **The web key** mirrors `public/` into the web root, including `code-path.php`, which points at the new release's code. That's the moment the site switches over.
-4. **The smoke test** checks that `/health` reports the new release, and the commit is tagged with it.
-
-**Tests and gate (D-027):** they run before every deploy, which adds a few minutes. If they fail, nothing is deployed. To skip them for one run, untick **Run the tests and the accessibility gate** under Actions → Deploy → **Run workflow**. To skip them on every push, for example while fixing the deploy itself, add a repository variable `RUN_TESTS` set to `false` (Settings → Secrets and variables → Actions → Variables).
-
-**Dry run:** if the file `.github/dry-run` is in the commit, the deploy checks the settings and keys and lists what each sync *would* change, but changes nothing on the host.
-
-## Settings the site reads
-
-The site reads these from environment variables when running locally or in CI. On the host, it reads them from `config.local.json`, which the deploy writes from the GitHub environment.
-
-| Setting | What it is |
-|---|---|
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | The MySQL database. `DB_PORT` defaults to 3306. `DB_HOST` may be a socket, written `localhost:/path/to/mysql.sock` |
-| `ORGANIZER_PASSWORD` | The organizers' shared password (D-023) |
-| `SESSION_SECRET` | A long random value, used to hash session codes and sign form tokens |
-| `CLUB_NAME` | Shown in the header and page titles |
-| `CLUB_TIMEZONE` | The club's time zone (D-006) |
-| `RELEASE` | The release ID. The deploy writes it into each release's folder (D-016) |
-| `FORM_MIN_SECONDS` | The shortest time to fill in a public form before it's treated as a bot (D-011). Defaults to 3; the tests set 0 |
+| `AWS_ROLE_ARN` | secret | The deploy role's ARN, printed by step E3 |
+| `AWS_ACCOUNT_ID` | secret | The 12-digit account ID (step B2) |
+| `AWS_REGION` | variable | The region, such as `us-east-2` |
+| `ORIGIN_SECRET` | secret | 64 random hex characters (step F2). CloudFront sends it; the site refuses requests without it |
+| `ORGANIZER_PASSWORD` | secret | The organizers' shared password (D-023) |
+| `SESSION_SECRET` | secret | 64 random hex characters (step F2) |
+| `CLUB_NAME` | variable | Shown in the header and page titles |
+| `CLUB_TIMEZONE` | variable | A [tz database name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), such as `America/Los_Angeles` |
+| `SITE_URL` | variable or secret | The CloudFront address, once the first deploy prints it (step G3). Optional |
+| `FREE_PLAN_WEB_ACL_ARN` | secret | The web ACL CloudFront's Free plan attaches (step G4). Set it before the next deploy after subscribing |
 
 ## One-time setup
 
-Do these steps in order. Every value in angle brackets is your own: write it into GitHub where a step says, and never into the repository (D-024). Steps marked 🔒 handle a private key or password: paste it nowhere except where the step says.
+Steps marked 🔒 involve credentials: do them yourself, and never paste secret values into a chat or a file. Every value in angle brackets is your own and never belongs in the repository (D-024).
 
-The commands for your own computer are for PowerShell on Windows. On macOS or Linux, use `~/.ssh/...` paths, and copy files with `pbcopy < file` or by opening them in an editor.
+**Already have an AWS organization on the Paid plan with advanced features on?** Skip Part A and start at **Part B**: a new project, its own GitHub OIDC provider and deploy role, and a new `aws` environment.
 
-### A. Your GitHub account
+### Part A. A new AWS account (skip if you have one)
 
-1. **Turn on two-factor authentication:** GitHub → your avatar → **Settings** → **Password and authentication**. Anyone who controls your GitHub account can deploy to the site, so it's the real security boundary.
-2. **Get an email when a deploy fails:** **Settings** → **Notifications** → **System** → **Actions** → turn on **Email**, and tick **Only notify for failed workflows**.
+AWS changes its sign-up often. Check https://aws.amazon.com/free on the day.
 
-### B. The host
+1. 🔒 **Prepare:**
+   - an email address only you read, for the account's owner;
+   - a password manager;
+   - an MFA device: a passkey, or an authenticator app.
+2. 🔒 **Sign up** at https://aws.amazon.com/start-here/ (**Sign up for AWS**). It creates an **AWS Builder ID** (your personal sign-in) and a **project** holding one AWS account, on the **Free plan**, with credits. Note the project's **region**.
+3. 🔒 **Secure the Builder ID:** register MFA, and add a recovery email that has MFA too.
+4. **Optional, before upgrading:** the console's credit activities can add up to $100 more. Delete anything an activity creates once it's done, so nothing keeps running.
+5. 🔒 **Upgrade to the Paid plan, then activate advanced features.** The Free plan's guardrails deny creating a GitHub OIDC provider, so keyless deploys need both.
+   - Upgrading can't be undone, and remaining credits keep paying the bill.
+   - Activation makes you the owner of the organization's **management account**: set its root password from the **Sign in using root user email → Forgot your password?** flow, then add two MFA devices.
+   - The spend limit is removed. Budgets and Cost Anomaly Detection replace it (step 7).
+   - Use AWS's own documentation for these steps ([Upgrade your account](https://docs.aws.amazon.com/accounts/latest/reference/upgrade-account.html), [Activate advanced features](https://docs.aws.amazon.com/accounts/latest/reference/activate-advanced-features.html)). AI assistants have contradicted it.
+6. **Check the guardrails.** In the management account, open **AWS Organizations → Policies → Service control policies**:
+   - **Keep** the policy that blocks leaving the organization, and the region restriction.
+   - **Allow CloudFront's flat-rate plans:** the region restriction's `us-east-1` statement must list `pricingplanmanager:*` in its `NotAction`, after `pricing:*`. Without it, subscribing to the Free plan (step G4) fails.
+   - **Leave** the dormant spend-limit policies unattached. If a deploy ever fails with "explicit deny in a service control policy", check whether one got attached.
+7. **Cost guards,** in the management account's **Billing and Cost Management** (they cover every account in the organization):
+   - **Budgets → Create budget → Use a template → Zero spend budget**, to your everyday email;
+   - **Billing preferences → Alert preferences**: turn on Free Tier alerts;
+   - **Cost Anomaly Detection:** keep the default services monitor, with an email alert at $1;
+   - **Account → Alternate contacts:** your everyday email for Billing, Operations and Security.
 
-3. **Check the hosting:** SSH access, `rsync`, MySQL 8, and PHP 8.1 or later with the `pdo_mysql` and `mbstring` extensions. Set the PHP version in the control panel for both the web and the command line.
-4. **Find the SSH server name, port and user.** Use the server's own host name, which the control panel usually shows, not your domain: it keeps working whatever happens to DNS. These become `SSH_HOST`, `SSH_PORT` (only if it isn't 22) and `SSH_USER`.
-5. **Set up the domain or subdomain** for the site in the control panel, turn on HTTPS for it (AutoSSL or Let's Encrypt), and note its **document root**, such as `/home/<user>/public_html` or a subdomain's folder. That's `<web root>` below.
-6. **Create the MySQL database and user** in the control panel:
-   - **The database:** on MySQL 8. The panel may add a prefix to the name, such as `<user>_club`. Keep the default collation.
-   - **The user:** give it a long random password from the panel's generator, and all privileges on this database only.
-   - **Note four things:** the database name (with any prefix), the user, the password, and the database host *exactly* as the panel shows it for MySQL 8. That might be `localhost`, a host name, or a socket like `localhost:/path/to/mysql.sock`.
-7. **Find two paths** in an SSH session (the control panel's web terminal works):
+### Part B. A new project for this site
+
+1. **Create a project** for the demo in the AWS console (for example, named `php2go`), in your usual region. A project is its own AWS account inside your organization, so this site's resources, its OIDC provider and its bill stay separate. Its billing still rolls up to the organization's.
+2. **Note its account ID:** open the project's console, then **CloudShell**, and run:
    ```sh
-   which php        # the PHP to run migrations with; check it with: php -v
-   which rrsync     # the rsync confinement script, often /usr/bin/rrsync
+   aws sts get-caller-identity --query Account --output text
    ```
-   If `php -v` isn't 8.1 or later, look for a versioned binary (the control panel's PHP settings usually name it). If there's no `rrsync`, ask the host for it: it's part of rsync.
-8. **Create the app folder and the two marker files:**
-   ```sh
-   mkdir -p ~/private/php2go
-   chmod 700 ~/private ~/private/php2go
-   touch ~/private/php2go/.app-target
-   touch <web root>/.deploy-target
-   cd ~/private/php2go && pwd      # this is APP_DIR, such as /home/<user>/private/php2go
+   That's `AWS_ACCOUNT_ID`. It isn't a credential, but keep it out of public places.
+
+### Part C. Tools on your PC
+
+1. **Install,** in an **admin** PowerShell, then reopen the terminal and VS Code:
+   ```powershell
+   winget install --id GoLang.Go -e
+   winget install --id OpenJS.NodeJS.LTS -e
+   winget install --id Amazon.AWSCLI -e
    ```
-   The deploy refuses to sync into a folder without its marker. The first deploy removes any placeholder page the host left in the web root.
-
-### C. The host's key → `SSH_KNOWN_HOSTS`
-
-This lets GitHub Actions refuse to connect to an impostor. Read the host's key on the host, then cross-check it over the network from your own computer.
-
-9. **On the host,** in an SSH session:
-   ```sh
-   cat /etc/ssh/ssh_host_ed25519_key.pub
-   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+   Then install the CDK CLI: `npm install -g aws-cdk@2.1146.1`.
+   - Run the installs from an admin terminal. A silent install started from a normal one can hang invisibly and block later installs with exit code 1618 until a restart.
+2. **Sign in from the command line** with your Builder ID, and choose the new project's account:
+   ```powershell
+   aws login --profile php2go --region <region>
+   aws configure set region <region> --profile php2go
+   aws sts get-caller-identity --profile php2go
    ```
-   The first command prints `ssh-ed25519 AAAA… <comment>`. The second prints its fingerprint, `SHA256:…`.
-10. **From your computer,** connect without logging in:
-    ```
-    ssh -o HostKeyAlgorithms=ssh-ed25519 -p <port> <user>@<ssh-host>
-    ```
-    It shows `ED25519 key fingerprint is SHA256:…` and asks whether to continue. **Compare the fingerprints, then type `no`.** If they don't match, stop.
-    If Windows' `ssh` fails with `unsupported KEX method`, add `-o KexAlgorithms=curve25519-sha256`. Avoid `ssh-keyscan` on Windows, which can fail the same way.
-11. **Build the value:** the SSH host name, a space, then the first two fields from step 9, without the trailing comment. If the port isn't 22, write the host as `[<ssh-host>]:<port>`.
-    ```
-    <ssh-host> ssh-ed25519 AAAA…
-    ```
+   If `aws login` offers to set up an AI agent's access to the account, answer **n**.
+3. **Give CDK the credentials.** CDK doesn't renew `aws login` credentials itself, so before each CDK command, in the same terminal:
+   ```powershell
+   aws configure export-credentials --profile php2go --format powershell | Invoke-Expression
+   ```
+   These are temporary credentials (about an hour), held only in that terminal. Never print `$env:AWS_SECRET_ACCESS_KEY`.
 
-### D. 🔒 The three deploy keys
+### Part D. Bootstrap CDK
 
-12. **Make the keys on your computer.** When asked for a passphrase, press Enter twice: GitHub Actions can't type one.
-    ```
-    ssh-keygen -t ed25519 -C "php2go_web" -f $HOME\.ssh\php2go_web
-    ssh-keygen -t ed25519 -C "php2go_app" -f $HOME\.ssh\php2go_app
-    ssh-keygen -t ed25519 -C "php2go_migrate" -f $HOME\.ssh\php2go_migrate
-    ```
-    Each makes two files: the **private** key (no extension), which only GitHub will hold, and the **public** key (`.pub`), which goes on the host.
-13. **Show each public key** and copy its single line:
-    ```
-    Get-Content $HOME\.ssh\php2go_web.pub
-    ```
-14. **Install the public keys on the host, each confined to its job.** Use an SSH session or the web terminal, not the control panel's key Import, which adds keys *without* the restriction. Replace each `ssh-ed25519 AAAA… php2go_…` with the line you copied, and put in your paths from steps 5, 7 and 8. Keep the single quotes, and use `>>` (append), never `>`, which would wipe the other keys.
-    ```sh
-    mkdir -p ~/.ssh && chmod 700 ~/.ssh
-    echo 'command="<rrsync path> <web root>",restrict ssh-ed25519 AAAA… php2go_web' >> ~/.ssh/authorized_keys
-    echo 'command="<rrsync path> <APP_DIR>",restrict ssh-ed25519 AAAA… php2go_app' >> ~/.ssh/authorized_keys
-    echo 'command="<php path> <APP_DIR>/migrate-gate.php",restrict ssh-ed25519 AAAA… php2go_migrate' >> ~/.ssh/authorized_keys
-    chmod 600 ~/.ssh/authorized_keys
-    ```
-    `restrict` turns off shells, port forwarding and the rest, and `command=` is the only thing the key can run. `migrate-gate.php` doesn't exist yet; the first deploy uploads it.
-15. **Check the lines arrived whole.** Web terminals can drop characters from long pasted lines, and a missing `restrict ` is easy to miss:
-    ```sh
-    tail -3 ~/.ssh/authorized_keys | cut -c1-100
-    ssh-keygen -lf ~/.ssh/authorized_keys
-    ```
-    Compare the fingerprints with `ssh-keygen -lf $HOME\.ssh\php2go_web.pub` and the other two on your computer. If the control panel ever rewrites `authorized_keys` and drops the `command=…,restrict` prefix, the deploy's safety check will stop with an error.
-    SSH also ignores `authorized_keys` if other accounts can write to it, so check its permissions: `chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys`.
-16. **Test each key from your computer** before it goes into GitHub:
-    ```
-    ssh -i $HOME\.ssh\php2go_web <user>@<ssh-host>
-    ssh -i $HOME\.ssh\php2go_app <user>@<ssh-host>
-    ssh -i $HOME\.ssh\php2go_migrate <user>@<ssh-host>
-    ```
-    - **Any message from the host means the key is accepted and confined.** For example, `rrsync` refuses because no rsync command was sent, or PHP can't open `migrate-gate.php`, which the first deploy uploads.
-    - **`Permission denied (publickey)` means the host doesn't accept that key.** Fix its line in `authorized_keys` before going on. Once the private keys are deleted in step 20, a bad key can only be replaced, not checked.
+Once per account and region. It creates a small S3 bucket for uploading the Lambda, and the roles CDK deploys through (under $0.01 a month):
+```powershell
+cdk bootstrap aws://<account ID>/<region>
+```
+Watch it under **CloudFormation → Stacks → CDKToolkit**.
 
-### E. 🔒 The GitHub environment
+### Part E. 🔒 Connect GitHub to AWS
 
-17. **Create the environment:** repo → **Settings** → **Environments** → **New environment** → name it `lamp`. Under **Deployment branches and tags**, choose **Selected branches** and add `main`, so only `main` can deploy.
-18. **Add the environment variables.** These are shown in plain text in every deploy log, so they hold only what's fine for anyone to see:
+1. **Find the GitHub subject the role will trust.** This repo uses GitHub's immutable subject format, which adds the owner's and the repo's numeric IDs:
+   ```powershell
+   gh api repos/<owner>/<repo>/actions/oidc/customization/sub
+   ```
+   - If it shows `"use_immutable_subject":true` with a `sub_claim_prefix`, the subject is that prefix plus `:environment:aws`, for example `repo:<owner>@<owner id>/<repo>@<repo id>:environment:aws`.
+   - Otherwise it's `repo:<owner>/<repo>:environment:aws`.
+   - In the other project, the plain form was refused on the first CI run because the repo used the immutable format, so check rather than guess.
+2. **Deploy the GitHub stack from your PC,** in the terminal from step C3. CI can't create the role it signs in with, so this one stack is deployed by hand:
+   ```powershell
+   cd infra
+   $env:AWS_ACCOUNT_ID = '<account ID>'
+   $env:AWS_REGION = '<region>'
+   $env:GITHUB_OIDC_SUBJECT = '<subject from step 1>'
+   cdk deploy Php2goGitHub
+   ```
+   - It creates the account's **GitHub OIDC provider** and the role **`php2go-github-deploy`**.
+   - The role trusts only that subject, so only jobs in this repo's `aws` environment can use it. Sessions last at most an hour.
+   - The role can do just two things: hand off to CDK's bootstrap roles, and write `/php2go/` parameters in SSM. `infra/cost_test.go` checks this.
+   - **If the account already has a GitHub OIDC provider,** creating a second one fails, since an account can have only one. Set `$env:EXISTING_OIDC_PROVIDER_ARN` to its ARN (**IAM → Identity providers**) and deploy again.
+3. **Note the output `DeployRoleArn`.** That's `AWS_ROLE_ARN`.
 
-    | Variable | Value |
-    |---|---|
-    | `SITE_URL` | `https://<your domain>`. As a variable, it's also the environment's link in GitHub |
-    | `CLUB_NAME` | the club's name, such as `Riverside Community Club` |
-    | `CLUB_TIMEZONE` | the club's time zone as a [tz database name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), such as `America/Chicago` |
-    | `SSH_PORT` | only if it isn't 22 |
-    | `DB_PORT` | only if it isn't 3306 and `DB_HOST` isn't a socket |
+### Part F. 🔒 The aws GitHub environment
 
-19. **Add the environment secrets.** GitHub shows a secret's value as `***` in every log. That covers the credentials, and also everything that identifies your host. **If the repo is public, so are its Actions logs.**
+1. **Create it:** repo → **Settings → Environments → New environment** → `aws`. Under **Deployment branches and tags**, choose **Selected branches** and add `main`. If the first push already created an `aws` environment, open that one instead.
+2. **Generate the two random secrets** straight to the clipboard, one at a time, and paste each into its secret:
+   ```powershell
+   -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) }) | Set-Clipboard
+   ```
+   Run it once for `ORIGIN_SECRET` and again for `SESSION_SECRET`.
+3. **Add the rest** from [the table above](#the-aws-github-environment): `AWS_ROLE_ARN`, `AWS_ACCOUNT_ID` and `ORGANIZER_PASSWORD` as secrets, and `AWS_REGION`, `CLUB_NAME` and `CLUB_TIMEZONE` as variables.
 
-    | Secret | Value |
-    |---|---|
-    | `SSH_HOST` | the SSH server name from step 4 |
-    | `SSH_USER` | your hosting account's user name |
-    | `SSH_KNOWN_HOSTS` | the line from step 11 |
-    | `APP_DIR` | the path from step 8, such as `/home/<user>/private/php2go` |
-    | `DB_HOST` | the database host from step 6, exactly as the panel shows it |
-    | `DB_NAME` | the database name from step 6, with any prefix |
-    | `SSH_WEB_KEY` | the **entire** private key file `php2go_web`, including the `-----BEGIN` and `-----END` lines |
-    | `SSH_APP_KEY` | the entire private key file `php2go_app` |
-    | `SSH_MIGRATE_KEY` | the entire private key file `php2go_migrate` |
-    | `DB_USER` | the database user from step 6 |
-    | `DB_PASSWORD` | the database password from step 6 |
-    | `ORGANIZER_PASSWORD` | a password to share with the organizers: a few random words is easy to share and hard to guess |
-    | `SESSION_SECRET` | a random value, generated below |
+### Part G. The first deploy
 
-    Any setting can be either a variable or a secret; when both exist, the secret wins. To hide one that's currently a variable, such as `SITE_URL` or `CLUB_TIMEZONE`, add a secret with the same name and value, then delete the variable.
-
-    To copy a private key without opening it:
-    ```
-    Get-Content $HOME\.ssh\php2go_web -Raw | Set-Clipboard
-    ```
-    To generate `SESSION_SECRET` straight to the clipboard:
-    ```
-    $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b) | Set-Clipboard
-    ```
-    On macOS or Linux, use `openssl rand -base64 32`.
-20. 🔒 **Delete the private keys from your computer.** GitHub now holds the only copies. If one is lost, make a new key rather than recover it. Keep the `.pub` files, which are harmless and help identify the keys later.
-    ```
-    Remove-Item $HOME\.ssh\php2go_web, $HOME\.ssh\php2go_app, $HOME\.ssh\php2go_migrate
-    ```
-
-### F. First deploy: a dry run, then the real one
-
-21. **Dry run:** add an empty file `.github/dry-run`, then commit and push to `main`. Check the Deploy run in GitHub Actions:
-    - every setting was found;
-    - the web and app keys passed the safety check;
-    - the lists show what *would* be uploaded and deleted.
-
-    Make sure nothing you want to keep in the web root is on the delete list.
-22. **The real deploy:** delete `.github/dry-run`, then commit and push. The run uploads the code, creates the tables, switches the web root over, and checks `/health`.
-23. **Check it:** `https://<your domain>/health` shows `"status":"ok"` and the release ID from the run. Sign in from the **Organizers** link in the footer, and create the first event.
+1. **Optional dry run:** add an empty `.github/dry-run`, then commit and push. The run signs in, checks the account and shows `cdk diff`, but changes nothing. Then delete the file, and commit and push.
+2. **The real deploy:** push to `main`, or run **Actions → Deploy → Run workflow**. The first `cdk deploy` takes several minutes, mostly creating the CloudFront distribution.
+3. **The address:** the run's summary prints `https://dxxxxxxxxxxxx.cloudfront.net`. Open it, then sign in from the **Organizers** link with `ORGANIZER_PASSWORD`. Add the address as `SITE_URL`.
+4. **Put CloudFront on the Free plan** ($0 a month, with no overage charges):
+   - In the project's console: **CloudFront → the distribution → Pricing plan** (or **Flat-rate plans**) **→ Free**.
+   - Subscribing attaches an AWS WAF web ACL named `CreatedByCloudFront-…`, which a plan distribution must keep. Copy its ARN from **WAF & Shield → Web ACLs** (choose **Global (CloudFront)**) into the secret `FREE_PLAN_WEB_ACL_ARN`, **before the next deploy**. Otherwise that deploy tries to detach it and fails.
+   - Subscribing also requires the price class **All**, which the stack already uses. Another project's deploy failed on exactly this: "Distributions with the Free pricing plan can't have the following features: Price class".
+   - After any console change to the distribution, compare it with `infra/site.go`.
+   - If the plan won't subscribe, check the guardrail in step A6. Pay-as-you-go's always-free allowance (1 TB and 10 million requests a month) also covers the site.
+5. **Redeploy** (push, or **Run workflow**) so the stack picks up `SITE_URL` and the web ACL.
+6. **Check the bill the next day:** **Billing → Bills** should show $0.00 for this project.
 
 ## If something goes wrong
 
-- **`rsync error … (code 23)` about times or permissions:** the host owns the folder itself and won't let it be changed. The deploy already leaves folder times and permissions alone; if this still appears, check the folder belongs to your account.
-- **`Couldn't connect with the … key` or `Permission denied (publickey)`:** check the key's secret holds the whole private key, that its `authorized_keys` line passed the test in step 16, and that `SSH_HOST`, `SSH_USER`, `SSH_PORT` and `SSH_KNOWN_HOSTS` match what you verified in steps 4 and 9–11.
-- **`The marker … isn't in this key's folder`:** the key's `rrsync` folder in `authorized_keys` doesn't match where you created the marker in step 8.
-- **The site shows the host's error page after the switch-over:** the control panel may have written PHP settings into the web root's `.htaccess`, which the deploy replaces. Set the PHP version in the panel's per-domain settings instead.
-- **A slow first connection:** some hosts pause new SSH connections that arrive in quick succession. The deploy opens one connection per key and reuses it, so only the first one waits.
+- **"explicit deny in a service control policy":** an organization guardrail blocked the action. See step A6. Before activation, the Free plan's guardrail is what blocks the OIDC provider.
+- **The deploy can't assume the role** (`Not authorized to perform sts:AssumeRoleWithWebIdentity`): the role's subject doesn't match. Check step E1, then redeploy `Php2goGitHub`.
+- **CDK says no credentials are configured:** run step C3 again; the exported credentials last about an hour.
+- **The smoke test sees the old release:** CloudFront and Lambda usually switch within a minute. The test waits three. Run it again before digging deeper.
+- **The function URL answers 200 instead of 403:** the Lambda isn't checking `ORIGIN_SECRET`. Make sure the secret is set, then redeploy.
 
 ## Changing the organizers' password
 
-Change the `ORGANIZER_PASSWORD` secret and run the Deploy workflow again. Every existing session ends (D-023).
+Change the `ORGANIZER_PASSWORD` secret and run the Deploy workflow. The deploy writes the new value to SSM and replaces the Lambda, which reads secrets once at start-up. Every existing session ends (D-023).
 
 ## Running it locally
 
-You need PHP 8.1+ with `pdo_mysql` and `mbstring`, a MySQL 8 database and Node 22. Set the settings above as environment variables, then:
+You need Go (version in `go.mod`) and Node 24:
 
 ```sh
-sh bin/serve-local.sh 8080                                   # applies migrations, then serves on port 8080
-node --test --test-concurrency=1 'tests/contract/*.test.mjs' # the acceptance tests
-cd tests/gate && npm install && npx playwright install && npx playwright test
+CLUB_NAME="Test Club" CLUB_TIMEZONE=America/Chicago ORGANIZER_PASSWORD=secret \
+  SESSION_SECRET=0123456789abcdef0123456789abcdef go run ./cmd/site    # in-memory store, http://127.0.0.1:8080
+go test ./... && (cd infra && go test ./...)                            # Go and infrastructure tests
 ```
 
-Use `FORM_MIN_SECONDS=0` for the tests. For the password-change test, start a second copy on the same database with another `ORGANIZER_PASSWORD` on port 8081, and set `ALT_BASE_URL=http://127.0.0.1:8081`; without it, that test is skipped.
+The acceptance tests and gate need two copies of the site sharing DynamoDB Local, as in `.github/workflows/deploy.yml`.
