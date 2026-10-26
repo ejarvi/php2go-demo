@@ -8,9 +8,14 @@
 
 In October 2026, [PHP2Shell](https://en.wikipedia.org/wiki/PHP2Shell) (CVE-2026-109618 and CVE-2026-109619) exposed a critical remote code execution bug in PHP 5.4 through 8.5. Amazon's honeypots logged an exploit attempt four days before public disclosure, the patch embargo leaked, and the fixes depended on a small, donation-funded upstream team.
 
-For a small site on shared hosting, that left the site's safety in other people's hands. PHP, Apache and Linux get patched on the hosting provider's schedule, and WordPress sites also depend on their plugins' PHP version constraints.
+If you run a smaller site on a shared PHP hosting account, a bug like this leaves you at the mercy of everything underneath you. You can't patch PHP, Apache or Linux yourself. You wait for your host to do it, on their schedule, and hope your site and its plugins still work on whatever version they move to.
 
-I had already been through this on a private app. I built it with Claude Code on PHP shared hosting, then regenerated it in Go on AWS in about a day and a half, because every requirement was already written down as a platform-neutral decision. This repo repeats that move in public, on a small site anyone can clone, so you can see the steps and reuse them.
+I experienced this with a private app I had built with Claude Code for shared PHP hosting. Since every requirement was already written down as a platform-neutral decision, I tried something other than waiting for the patch:
+- **The PHP risk:** I remediated it by regenerating the whole app in Go.
+- **Some of the shared-hosting risk:** I remediated it by moving the hosting to AWS.
+- **Cost:** at the same time, I experimented with extreme cost saving, by seeing whether I could fit it into AWS's free tier.
+
+It took about a day and a half. This repo repeats that move in public, on a small site anyone can clone, so you can see the steps and reuse them.
 
 ## The idea: maintain the specs, regenerate the code
 
