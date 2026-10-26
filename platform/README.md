@@ -133,13 +133,13 @@ With advanced features on, a new project in your organization is a **member acco
    - Run the installs from an admin terminal. A silent install started from a normal one can hang invisibly and block later installs with exit code 1618 until a restart.
 2. **Sign the CLI in to the management account** with your Builder ID. At the account prompt, choose the management account:
    ```powershell
-   aws login --profile jarvi --region us-east-2
+   aws login --profile org --region us-east-2
    ```
    If `aws login` offers to set up an AI agent's access to the account, answer **n**.
 3. **Add a profile that switches into the new account.** Open `notepad $HOME\.aws\config` and add:
    ```ini
    [profile php2go]
-   source_profile = jarvi
+   source_profile = org
    role_arn = arn:aws:iam::<new account ID>:role/OrganizationAccountAccessRole
    region = us-east-2
    ```
@@ -148,7 +148,7 @@ With advanced features on, a new project in your organization is a **member acco
    ```powershell
    aws configure export-credentials --profile php2go --format powershell | Invoke-Expression
    ```
-   These are temporary credentials (about an hour), held only in that terminal. Never print `$env:AWS_SECRET_ACCESS_KEY`. If they expire, run `aws login --profile jarvi` again, then this step.
+   These are temporary credentials (about an hour), held only in that terminal. Never print `$env:AWS_SECRET_ACCESS_KEY`. If they expire, run `aws login --profile org` again, then this step.
 
 ### Part D. Bootstrap CDK
 
