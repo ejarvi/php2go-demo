@@ -173,26 +173,26 @@ This lets GitHub Actions refuse to connect to an impostor. Read the host's key o
 ### E. 🔒 The GitHub environment
 
 17. **Create the environment:** repo → **Settings** → **Environments** → **New environment** → name it `lamp`. Under **Deployment branches and tags**, choose **Selected branches** and add `main`, so only `main` can deploy.
-18. **Add the environment variables.** These aren't credentials, so they stay visible and editable:
+18. **Add the environment variables.** These are shown in plain text in every deploy log, so they hold only what's fine for anyone to see:
 
     | Variable | Value |
     |---|---|
-    | `SSH_HOST` | the SSH server name from step 4 |
-    | `SSH_PORT` | only if it isn't 22 |
-    | `SSH_USER` | your hosting account's user name |
-    | `SSH_KNOWN_HOSTS` | the line from step 11. It's a public key, not a credential |
-    | `APP_DIR` | the path from step 8, such as `/home/<user>/private/php2go` |
-    | `SITE_URL` | `https://<your domain>` |
+    | `SITE_URL` | `https://<your domain>`. As a variable, it's also the environment's link in GitHub |
     | `CLUB_NAME` | the club's name, such as `Riverside Community Club` |
     | `CLUB_TIMEZONE` | the club's time zone as a [tz database name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), such as `America/Chicago` |
-    | `DB_HOST` | the database host from step 6, exactly as the panel shows it |
+    | `SSH_PORT` | only if it isn't 22 |
     | `DB_PORT` | only if it isn't 3306 and `DB_HOST` isn't a socket |
-    | `DB_NAME` | the database name from step 6, with any prefix |
 
-19. **Add the environment secrets.** These are the credentials:
+19. **Add the environment secrets.** GitHub shows a secret's value as `***` in every log. That covers the credentials, and also everything that identifies your host. **If the repo is public, so are its Actions logs.**
 
     | Secret | Value |
     |---|---|
+    | `SSH_HOST` | the SSH server name from step 4 |
+    | `SSH_USER` | your hosting account's user name |
+    | `SSH_KNOWN_HOSTS` | the line from step 11 |
+    | `APP_DIR` | the path from step 8, such as `/home/<user>/private/php2go` |
+    | `DB_HOST` | the database host from step 6, exactly as the panel shows it |
+    | `DB_NAME` | the database name from step 6, with any prefix |
     | `SSH_WEB_KEY` | the **entire** private key file `php2go_web`, including the `-----BEGIN` and `-----END` lines |
     | `SSH_APP_KEY` | the entire private key file `php2go_app` |
     | `SSH_MIGRATE_KEY` | the entire private key file `php2go_migrate` |
@@ -200,6 +200,8 @@ This lets GitHub Actions refuse to connect to an impostor. Read the host's key o
     | `DB_PASSWORD` | the database password from step 6 |
     | `ORGANIZER_PASSWORD` | a password to share with the organizers: a few random words is easy to share and hard to guess |
     | `SESSION_SECRET` | a random value, generated below |
+
+    Any setting can be either a variable or a secret; when both exist, the secret wins. To hide one that's currently a variable, such as `SITE_URL` or `CLUB_TIMEZONE`, add a secret with the same name and value, then delete the variable.
 
     To copy a private key without opening it:
     ```
