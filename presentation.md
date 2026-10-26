@@ -1,7 +1,7 @@
-# Remediation Through Regeneration: talk notes
+# PHP2Go: talk notes
 
-**Remediation Through Regeneration: Small Sites Don't Have to Wait for the Patch**
-*Answering PHP2Shell by regenerating a PHP site in Go on AWS with Claude, for $0.14*
+**PHP2Go: Regeneration as Remediation for PHP2Shell**
+*When there's no patch yet, when patching isn't an option, or when it costs more than rebuilding*
 
 A 5-minute live demo for AI Tinkerers. There are no slides: everything is shown in the browser, the editor, the terminal, GitHub and the AWS console. The demo repo is this one; see the [README](README.md).
 
@@ -9,7 +9,16 @@ I also used Claude to help develop this presentation, including these notes.
 
 ## In one paragraph
 
-The usual answer to a vulnerability is find, wait, patch. For a small site on shared PHP hosting, that means following patch guidance and waiting: on the PHP project, on Apache and Linux, and on how quickly your host's IT security team rolls out the fix. You're trusting the same dependencies that exposed you to get you out. This talk challenges the assumption that this is the only option. With coding agents, rewriting is cheap. If your requirements live in platform-neutral decisions and tests, you can **regenerate** the vulnerable component in a different language, on a different platform, and let the same tests prove it still meets every requirement. When PHP2Shell landed, I did this with a private app: Claude regenerated it in Go on AWS from its specs and decision log, in about a day and a half. This repo repeats that move on a mock club-events site, with the PHP version archived on a `lamp` branch and the Go version on `main`.
+The usual answer to a vulnerability is find, wait, patch. For a small site on shared PHP hosting, that means following patch guidance and waiting: on the PHP project, on Apache and Linux, and on how quickly your host's IT security team rolls out the fix. You're trusting the same dependencies that exposed you to get you out. This talk challenges the assumption that this is the only option. With coding agents, regenerating the code is cheap. If your requirements live in platform-neutral decisions and tests, you can **regenerate** the vulnerable component in a different language, on a different platform, and let the same tests prove it still meets every requirement. When PHP2Shell landed, I did this with a private app: Claude regenerated it in Go on AWS from its specs and decision log, in about a day and a half. This repo repeats that move on a mock club-events site, with the PHP version archived on a `lamp` branch and the Go version on `main`.
+
+## When regeneration beats patching
+
+Regeneration is worth considering whenever waiting for a patch is the riskier or costlier choice:
+- **A vulnerability is being exploited, and there's no patch yet.** All you know is that your platform has a hole and someone is using it. With PHP2Shell, Amazon's honeypots logged exploitation four days before disclosure. A site whose requirements live in specs and tests can leave the vulnerable platform without waiting for its fix.
+- **Patching isn't an option.** The platform is end-of-life or abandoned, your host won't upgrade, or the fix breaks plugins and code you depend on.
+- **Patching costs more than rebuilding.** Upgrading an old stack, retesting it and re-hosting it can take longer than regenerating the whole solution on a platform you choose, once coding is cheap and the tests define "done".
+
+Regeneration doesn't replace patching. It adds a second option, and it only works if your decisions, constraints and tests are good enough to judge the regenerated code.
 
 The talk rests on three points:
 1. **Regeneration is a remediation option:** when the platform is the problem, rebuild on another one instead of waiting for its fix. Put your effort into decisions and tests, and the code becomes replaceable.
@@ -44,7 +53,7 @@ The demo is a before and after: it opens on the PHP site, walks through the move
 | 2:00–2:45 | **The pipeline:** the `main` workflow file, then a green run in GitHub Actions: tests → accessibility gate → cost gate → OIDC → `cdk deploy` → smoke test → release tag | Same platform and same gates as `lamp`, new target. The SSH key became a short-lived OIDC role. |
 | 2:45–3:45 | **After:** both sites side by side in the browser, the same sign-up submitted on each | Same site, same contract tests, new stack. *Pause here for the audience.* |
 | 3:45–4:30 | **Cost:** the AWS Billing and Cost Management console showing $0.14 | Hosting costs $0.00. The whole $0.14 is Bedrock playground queries, paid from free credits, and they completed an AWS credit challenge that paid out $20 in more credit. Net, the account is ahead. |
-| 4:30–5:00 | — | You don't have to wait for the patch. Write your decisions down and guard them with tests, and the next PHP2Shell is a rebuild you choose, not an emergency you wait out. |
+| 4:30–5:00 | — | When the platform is the vulnerability, you don't have to wait for its patch. Write your decisions down and guard them with tests, and you can regenerate the whole solution: the next PHP2Shell is a rebuild you choose, not an emergency you wait out. |
 
 ### Tabs to have open, in order
 
