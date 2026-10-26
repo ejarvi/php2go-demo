@@ -21,6 +21,12 @@ concurrency:
 permissions:
   contents: read
 
+# Git on the runner names new branches "main", like this repo, so checkout doesn't warn about "master".
+env:
+  GIT_CONFIG_COUNT: '1'
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 jobs:
   # On by default. Off for one run by unticking the Run workflow checkbox, or for every
   # push with the repository variable RUN_TESTS set to false.
