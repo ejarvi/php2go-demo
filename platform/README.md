@@ -57,6 +57,8 @@ A leaked key can't open a shell, read other folders or run anything else (D-015)
 3. **The web key** mirrors `public/` into the web root, including `code-path.php`, which points at the new release's code. That's the moment the site switches over.
 4. **The smoke test** checks that `/health` reports the new release, and the commit is tagged with it.
 
+**Tests and gate (D-026):** off by default, so a deploy takes seconds. To run them first, tick **Run the tests and the accessibility gate** under Actions → Deploy → **Run workflow**. To run them on every push, add a repository variable `RUN_TESTS` set to `true` (Settings → Secrets and variables → Actions → Variables). If they run and fail, nothing is deployed.
+
 **Dry run:** if the file `.github/dry-run` is in the commit, the deploy checks the settings and keys and lists what each sync *would* change, but changes nothing on the host.
 
 ## Settings the site reads
@@ -158,11 +160,20 @@ This lets GitHub Actions refuse to connect to an impostor. Read the host's key o
     ssh-keygen -lf ~/.ssh/authorized_keys
     ```
     Compare the fingerprints with `ssh-keygen -lf $HOME\.ssh\php2go_web.pub` and the other two on your computer. If the control panel ever rewrites `authorized_keys` and drops the `command=…,restrict` prefix, the deploy's safety check will stop with an error.
+    SSH also ignores `authorized_keys` if other accounts can write to it, so check its permissions: `chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys`.
+16. **Test each key from your computer** before it goes into GitHub:
+    ```
+    ssh -i $HOME\.ssh\php2go_web <user>@<ssh-host>
+    ssh -i $HOME\.ssh\php2go_app <user>@<ssh-host>
+    ssh -i $HOME\.ssh\php2go_migrate <user>@<ssh-host>
+    ```
+    - **Any message from the host means the key is accepted and confined.** For example, `rrsync` refuses because no rsync command was sent, or PHP can't open `migrate-gate.php`, which the first deploy uploads.
+    - **`Permission denied (publickey)` means the host doesn't accept that key.** Fix its line in `authorized_keys` before going on. Once the private keys are deleted in step 20, a bad key can only be replaced, not checked.
 
 ### E. 🔒 The GitHub environment
 
-16. **Create the environment:** repo → **Settings** → **Environments** → **New environment** → name it `lamp`. Under **Deployment branches and tags**, choose **Selected branches** and add `main`, so only `main` can deploy.
-17. **Add the environment variables.** These aren't credentials, so they stay visible and editable:
+17. **Create the environment:** repo → **Settings** → **Environments** → **New environment** → name it `lamp`. Under **Deployment branches and tags**, choose **Selected branches** and add `main`, so only `main` can deploy.
+18. **Add the environment variables.** These aren't credentials, so they stay visible and editable:
 
     | Variable | Value |
     |---|---|
@@ -178,7 +189,7 @@ This lets GitHub Actions refuse to connect to an impostor. Read the host's key o
     | `DB_PORT` | only if it isn't 3306 and `DB_HOST` isn't a socket |
     | `DB_NAME` | the database name from step 6, with any prefix |
 
-18. **Add the environment secrets.** These are the credentials:
+19. **Add the environment secrets.** These are the credentials:
 
     | Secret | Value |
     |---|---|
@@ -199,26 +210,26 @@ This lets GitHub Actions refuse to connect to an impostor. Read the host's key o
     $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b) | Set-Clipboard
     ```
     On macOS or Linux, use `openssl rand -base64 32`.
-19. 🔒 **Delete the private keys from your computer.** GitHub now holds the only copies. If one is lost, make a new key rather than recover it. Keep the `.pub` files, which are harmless and help identify the keys later.
+20. 🔒 **Delete the private keys from your computer.** GitHub now holds the only copies. If one is lost, make a new key rather than recover it. Keep the `.pub` files, which are harmless and help identify the keys later.
     ```
     Remove-Item $HOME\.ssh\php2go_web, $HOME\.ssh\php2go_app, $HOME\.ssh\php2go_migrate
     ```
 
 ### F. First deploy: a dry run, then the real one
 
-20. **Dry run:** add an empty file `.github/dry-run`, then commit and push to `main`. Check the Deploy run in GitHub Actions:
+21. **Dry run:** add an empty file `.github/dry-run`, then commit and push to `main`. Check the Deploy run in GitHub Actions:
     - every setting was found;
     - the web and app keys passed the safety check;
     - the lists show what *would* be uploaded and deleted.
 
     Make sure nothing you want to keep in the web root is on the delete list.
-21. **The real deploy:** delete `.github/dry-run`, then commit and push. The run uploads the code, creates the tables, switches the web root over, and checks `/health`.
-22. **Check it:** `https://<your domain>/health` shows `"status":"ok"` and the release ID from the run. Sign in from the **Organizers** link in the footer, and create the first event.
+22. **The real deploy:** delete `.github/dry-run`, then commit and push. The run uploads the code, creates the tables, switches the web root over, and checks `/health`.
+23. **Check it:** `https://<your domain>/health` shows `"status":"ok"` and the release ID from the run. Sign in from the **Organizers** link in the footer, and create the first event.
 
 ## If something goes wrong
 
 - **`rsync error … (code 23)` about times or permissions:** the host owns the folder itself and won't let it be changed. The deploy already leaves folder times and permissions alone; if this still appears, check the folder belongs to your account.
-- **`Couldn't connect with the … key`:** check the key's secret holds the whole private key, and that `SSH_HOST`, `SSH_USER`, `SSH_PORT` and `SSH_KNOWN_HOSTS` match what you verified in steps 4 and 9–11.
+- **`Couldn't connect with the … key` or `Permission denied (publickey)`:** check the key's secret holds the whole private key, that its `authorized_keys` line passed the test in step 16, and that `SSH_HOST`, `SSH_USER`, `SSH_PORT` and `SSH_KNOWN_HOSTS` match what you verified in steps 4 and 9–11.
 - **`The marker … isn't in this key's folder`:** the key's `rrsync` folder in `authorized_keys` doesn't match where you created the marker in step 8.
 - **The site shows the host's error page after the switch-over:** the control panel may have written PHP settings into the web root's `.htaccess`, which the deploy replaces. Set the PHP version in the panel's per-domain settings instead.
 - **A slow first connection:** some hosts pause new SSH connections that arrive in quick succession. The deploy opens one connection per key and reuses it, so only the first one waits.

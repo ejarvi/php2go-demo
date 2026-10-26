@@ -16,7 +16,7 @@ What's left before the demo in [presentation.md](presentation.md) can run. As of
 - [ ] Push and get CI green: PHP syntax check, contract tests, then the Playwright + axe gate. None of it has run yet, because nothing needed is installed locally.
 - [ ] Follow the one-time setup in `platform/README.md`, steps A–E: the host, the database, the host's key, the three confined deploy keys, and the `lamp` GitHub environment's variables and secrets.
 - [x] Write the GitHub Actions workflow: tests → Playwright + axe gate → rsync deploy → smoke test → release tag.
-- [ ] Deploy it, with a dry run first (step F), and confirm `/health` shows the release.
+- [ ] Deploy it, with a dry run first (steps 21–23), and confirm `/health` shows the release.
 
 ## The move
 
