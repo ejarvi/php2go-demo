@@ -38,7 +38,7 @@ It deliberately sends no email, which keeps the demo free of mail setup.
 
 ## Two branches
 
-`lamp` is the original PHP version. Its CI/CD pipeline deployed it on every push; now that it's archived, the pipeline runs only when started manually. `main` is the Go version on AWS, deployed on every push.
+The PHP version on Linux shared hosting used to be deployed on every push. It's now archived in its own branch, `lamp`. The Go version on AWS, on `main`, is deployed on every push instead.
 
 | | `lamp` | `main` (AWS) |
 |---|---|---|
