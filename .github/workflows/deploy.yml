@@ -108,8 +108,11 @@ jobs:
       # times out in seconds and is retried, instead of hanging the step.
       - name: Make apt retry stalled downloads
         run: |
-          printf '%s
-' 'Acquire::Retries "5";' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";'             | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null <<'APT'
+          Acquire::Retries "5";
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          APT
 
       - name: Install the gate's browsers
         working-directory: tests/gate
