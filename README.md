@@ -1,8 +1,8 @@
 # PHP2Go
 
-**A typical PHP/MySQL shared-hosting site, regenerated in Go on AWS from the same specs with Claude Code.** Both versions are deployed by GitHub Actions. The move cuts hosting cost to a $0 target and replaces SSH deploy keys with short-lived OIDC credentials.
+**Remediation through regeneration: small sites don't have to wait for the patch.** A typical PHP/MySQL shared-hosting site, regenerated in Go on AWS from the same specs with Claude Code, instead of waiting on PHP, the host and their patch schedules. Both versions are deployed by GitHub Actions. The move cuts hosting cost to $0 and replaces SSH deploy keys with short-lived OIDC credentials.
 
-> **Status:** the PHP version is live and archived on the `lamp` branch. The Go version on AWS is built on `main` and passes the same acceptance tests and accessibility gate. Its first AWS deploy waits for the one-time AWS setup in [platform/README.md](platform/README.md).
+> **Status:** both versions are live. The PHP version is archived on the `lamp` branch. The Go version on `main` passes the same acceptance tests and accessibility gate, and deploys to AWS on every push.
 
 ## Why this exists
 

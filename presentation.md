@@ -1,6 +1,7 @@
-# PHP2Go: talk notes
+# Remediation Through Regeneration: talk notes
 
-**PHP2Go: After PHP2Shell, Regenerating a PHP Site in Go on AWS with Claude, for $0.14**
+**Remediation Through Regeneration: Small Sites Don't Have to Wait for the Patch**
+*Answering PHP2Shell by regenerating a PHP site in Go on AWS with Claude, for $0.14*
 
 A 5-minute live demo for AI Tinkerers. There are no slides: everything is shown in the browser, the editor, the terminal, GitHub and the AWS console. The demo repo is this one; see the [README](README.md).
 
@@ -8,12 +9,14 @@ I also used Claude to help develop this presentation, including these notes.
 
 ## In one paragraph
 
-PHP2Shell showed what PHP on shared hosting really costs a small site. Your security depends on a hosting provider's patch schedule and on a thinly staffed upstream. I'd built a private app on that stack with Claude Code. When PHP2Shell landed, I had Claude regenerate it in Go on AWS from its specs and decision log, in about a day and a half. This repo repeats that move on a typical small PHP site, with the PHP version archived on a `lamp` branch and the Go version on `main`, so the steps are reusable.
+The usual answer to a vulnerability is find, wait, patch. For a small site on shared PHP hosting, that means following patch guidance and waiting: on the PHP project, on Apache and Linux, and on how quickly your host's IT security team rolls out the fix. You're trusting the same dependencies that exposed you to get you out. This talk challenges the assumption that this is the only option. With coding agents, rewriting is cheap. If your requirements live in platform-neutral decisions and tests, you can **regenerate** the vulnerable component in a different language, on a different platform, and let the same tests prove it still meets every requirement. When PHP2Shell landed, I did this with a private app: Claude regenerated it in Go on AWS from its specs and decision log, in about a day and a half. This repo repeats that move on a mock club-events site, with the PHP version archived on a `lamp` branch and the Go version on `main`.
 
 The talk rests on three points:
-1. **Lower cost:** paid shared hosting → AWS at a $0 target, enforced in CI.
-2. **Better security:** a short, visible patch surface, and deploys without stored keys (SSH → OIDC).
-3. **The same pipeline:** GitHub Actions deploys both branches, with the same gates in the same order.
+1. **Regeneration is a remediation option:** when the platform is the problem, rebuild on another one instead of waiting for its fix. Put your effort into decisions and tests, and the code becomes replaceable.
+2. **Better security:** a short, visible dependency list you patch on your own schedule, and deploys without stored keys (SSH → OIDC).
+3. **Lower cost, same pipeline:** shared hosting → AWS at $0, enforced in CI, deployed by the same GitHub Actions gates in the same order.
+
+The honest caveat: the new stack has a supply chain too (Go modules, AWS). The claim isn't "no dependencies". It's a shorter list you can see and control, plus the option to move again.
 
 ## Background: PHP2Shell
 
@@ -39,7 +42,7 @@ The demo is a before and after: it opens on the PHP site, walks through the move
 | 2:00–2:45 | **The pipeline:** the `main` workflow file, then a green run in GitHub Actions: tests → accessibility gate → cost gate → OIDC → `cdk deploy` → smoke test → release tag | Same platform and same gates as `lamp`, new target. The SSH key became a short-lived OIDC role. |
 | 2:45–3:45 | **After:** both sites side by side in the browser, the same sign-up submitted on each | Same site, same contract tests, new stack. *Pause here for the audience.* |
 | 3:45–4:30 | **Cost:** the AWS Billing and Cost Management console showing $0.14 | Hosting costs $0.00. The whole $0.14 is Bedrock playground queries, paid from free credits, and they completed an AWS credit challenge that paid out $20 in more credit. Net, the account is ahead. |
-| 4:30–5:00 | — | Write your decisions down, and the next PHP2Shell is a rebuild, not an emergency. |
+| 4:30–5:00 | — | You don't have to wait for the patch. Write your decisions down and guard them with tests, and the next PHP2Shell is a rebuild you choose, not an emergency you wait out. |
 
 ### Tabs to have open, in order
 
