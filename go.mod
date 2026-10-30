@@ -2,6 +2,9 @@ module github.com/ejarvi/php2go-demo
 
 go 1.27.0
 
+// Listen with plain TCP, not multipath TCP, until the kernel fix for CVE-2026-98432 ships.
+godebug multipathtcp=0
+
 require (
 	github.com/aws/aws-lambda-go v1.55.1
 	github.com/aws/aws-sdk-go-v2 v1.47.4
