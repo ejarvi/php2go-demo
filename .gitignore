@@ -7,3 +7,4 @@ playwright-report/
 server*.log
 infra/cdk.out/
 cdk-outputs.json
+.claude/settings.local.json
